@@ -1,62 +1,173 @@
+// src/context/AppContext.js
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AppContext = createContext();
 
 const initialState = {
+  isLoggedIn: false,
   currentStatus: 'OFF_DUTY',
   currentTime: new Date(),
+  statusStartTime: new Date(),
   odometer: 125840,
   location: 'Dallas, TX',
   hoursData: {
-    drive: 8.5,
-    onDuty: 10.2,
-    offDuty: 13.8,
-    sleeper: 0
+    drive: 0,
+    onDuty: 0,
+    offDuty: 10,
+    sleeper: 0,
+    totalDuty: 0,
+    remaining: {
+      drive: 11,
+      duty: 14,
+      cycle: 70
+    }
   },
+  cycleHours: 0,
   violations: [],
-  logEntries: [
-    { id: 1, time: '06:00', status: 'OFF_DUTY', location: 'Dallas, TX', odometer: 125840, notes: 'End of 10-hour break' },
-    { id: 2, time: '06:30', status: 'ON_DUTY', location: 'Dallas, TX', odometer: 125840, notes: 'Pre-trip inspection' },
-    { id: 3, time: '07:00', status: 'DRIVING', location: 'Dallas, TX', odometer: 125840, notes: 'Departed terminal' },
-    { id: 4, time: '11:30', status: 'ON_DUTY', location: 'Austin, TX', odometer: 126040, notes: 'Loading at warehouse' },
-    { id: 5, time: '12:30', status: 'DRIVING', location: 'Austin, TX', odometer: 126040, notes: 'En route to Houston' }
-  ],
+  logEntries: [],
   driverInfo: {
-    name: 'John Smith',
-    license: 'TX123456789',
-    carrier: 'ABC Trucking LLC',
-    truck: 'Unit 145'
+    id: null,
+    name: '',
+    license: '',
+    carrier: '',
+    truck: '',
+    username: ''
   },
-  inspections: [
-    { id: 1, type: 'PRE_TRIP', date: '2025-07-03', time: '06:30', status: 'PASSED', defects: [] },
-    { id: 2, type: 'POST_TRIP', date: '2025-07-02', time: '18:00', status: 'PASSED', defects: [] }
-  ]
+  inspections: []
 };
 
 const appReducer = (state, action) => {
   switch (action.type) {
+    case 'LOGIN':
+      return { 
+        ...state, 
+        isLoggedIn: true, 
+        driverInfo: action.payload 
+      };
+    case 'LOGOUT':
+      return { 
+        ...initialState, 
+        isLoggedIn: false 
+      };
     case 'SET_STATUS':
-      return { ...state, currentStatus: action.payload };
+      const newHours = calculateHours(state, action.payload);
+      return { 
+        ...state, 
+        currentStatus: action.payload,
+        statusStartTime: new Date(),
+        hoursData: newHours
+      };
     case 'UPDATE_TIME':
-      return { ...state, currentTime: action.payload };
+      const updatedHours = updateCurrentHours(state);
+      return { 
+        ...state, 
+        currentTime: action.payload,
+        hoursData: updatedHours
+      };
     case 'ADD_LOG_ENTRY':
-      return { ...state, logEntries: [...state.logEntries, action.payload] };
-    case 'UPDATE_HOURS':
-      return { ...state, hoursData: action.payload };
-    case 'SET_VIOLATIONS':
-      return { ...state, violations: action.payload };
+      return { 
+        ...state, 
+        logEntries: [action.payload, ...state.logEntries] 
+      };
     case 'UPDATE_LOCATION':
-      return { ...state, location: action.payload };
+      return { 
+        ...state, 
+        location: action.payload 
+      };
     case 'UPDATE_ODOMETER':
-      return { ...state, odometer: action.payload };
+      return { 
+        ...state, 
+        odometer: action.payload 
+      };
+    case 'SET_VIOLATIONS':
+      return { 
+        ...state, 
+        violations: action.payload 
+      };
     case 'ADD_INSPECTION':
-      return { ...state, inspections: [...state.inspections, action.payload] };
+      return { 
+        ...state, 
+        inspections: [action.payload, ...state.inspections] 
+      };
     case 'LOAD_STATE':
-      return { ...state, ...action.payload };
+      return { 
+        ...state, 
+        ...action.payload,
+        currentTime: new Date(),
+        statusStartTime: action.payload.statusStartTime ? new Date(action.payload.statusStartTime) : new Date()
+      };
     default:
       return state;
   }
+};
+
+const calculateHours = (state, newStatus) => {
+  const now = new Date();
+  const timeDiff = (now - new Date(state.statusStartTime)) / (1000 * 60 * 60); // hours
+  
+  const updatedHours = { ...state.hoursData };
+  
+  // Add time to the previous status
+  switch (state.currentStatus) {
+    case 'DRIVING':
+      updatedHours.drive += timeDiff;
+      updatedHours.totalDuty += timeDiff;
+      break;
+    case 'ON_DUTY':
+      updatedHours.onDuty += timeDiff;
+      updatedHours.totalDuty += timeDiff;
+      break;
+    case 'OFF_DUTY':
+      updatedHours.offDuty += timeDiff;
+      break;
+    case 'SLEEPER':
+      updatedHours.sleeper += timeDiff;
+      break;
+  }
+  
+  // Calculate remaining hours
+  updatedHours.remaining = {
+    drive: Math.max(0, 11 - updatedHours.drive),
+    duty: Math.max(0, 14 - updatedHours.totalDuty),
+    cycle: Math.max(0, 70 - (updatedHours.drive + updatedHours.onDuty))
+  };
+  
+  return updatedHours;
+};
+
+const updateCurrentHours = (state) => {
+  const now = new Date();
+  const timeDiff = (now - new Date(state.statusStartTime)) / (1000 * 60 * 60); // hours
+  
+  const updatedHours = { ...state.hoursData };
+  
+  // Add time to current status
+  switch (state.currentStatus) {
+    case 'DRIVING':
+      updatedHours.drive = state.hoursData.drive + timeDiff;
+      updatedHours.totalDuty = state.hoursData.totalDuty + timeDiff;
+      break;
+    case 'ON_DUTY':
+      updatedHours.onDuty = state.hoursData.onDuty + timeDiff;
+      updatedHours.totalDuty = state.hoursData.totalDuty + timeDiff;
+      break;
+    case 'OFF_DUTY':
+      updatedHours.offDuty = state.hoursData.offDuty + timeDiff;
+      break;
+    case 'SLEEPER':
+      updatedHours.sleeper = state.hoursData.sleeper + timeDiff;
+      break;
+  }
+  
+  // Calculate remaining hours
+  updatedHours.remaining = {
+    drive: Math.max(0, 11 - updatedHours.drive),
+    duty: Math.max(0, 14 - updatedHours.totalDuty),
+    cycle: Math.max(0, 70 - (updatedHours.drive + updatedHours.onDuty))
+  };
+  
+  return updatedHours;
 };
 
 export const AppProvider = ({ children }) => {
@@ -64,14 +175,19 @@ export const AppProvider = ({ children }) => {
 
   useEffect(() => {
     loadState();
+  }, []);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       dispatch({ type: 'UPDATE_TIME', payload: new Date() });
-    }, 60000);
+    }, 60000); // Update every minute
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    saveState();
+    if (state.isLoggedIn) {
+      saveState();
+    }
   }, [state]);
 
   useEffect(() => {
@@ -79,23 +195,25 @@ export const AppProvider = ({ children }) => {
   }, [state.hoursData]);
 
   const loadState = async () => {
-  try {
-    const savedState = await AsyncStorage.getItem('appState');
-    if (savedState) {
-      const parsed = JSON.parse(savedState);
-      if (parsed.currentTime) {
-        parsed.currentTime = new Date(parsed.currentTime); // fix here
+    try {
+      const savedState = await AsyncStorage.getItem('appState');
+      if (savedState) {
+        const parsed = JSON.parse(savedState);
+        dispatch({ type: 'LOAD_STATE', payload: parsed });
       }
-      dispatch({ type: 'LOAD_STATE', payload: parsed });
+    } catch (error) {
+      console.error('Error loading state:', error);
     }
-  } catch (error) {
-    console.error('Error loading state:', error);
-  }
-};
+  };
 
   const saveState = async () => {
     try {
-      await AsyncStorage.setItem('appState', JSON.stringify(state));
+      const stateToSave = {
+        ...state,
+        currentTime: state.currentTime.toISOString(),
+        statusStartTime: state.statusStartTime.toISOString()
+      };
+      await AsyncStorage.setItem('appState', JSON.stringify(stateToSave));
     } catch (error) {
       console.error('Error saving state:', error);
     }
@@ -103,33 +221,98 @@ export const AppProvider = ({ children }) => {
 
   const checkViolations = () => {
     const violations = [];
+    
     if (state.hoursData.drive > 11) {
-      violations.push({ type: 'DRIVE_TIME', message: 'Driving time exceeds 11 hours' });
+      violations.push({ 
+        type: 'DRIVE_TIME', 
+        message: `Driving time exceeds 11 hours (${state.hoursData.drive.toFixed(1)}h)`,
+        severity: 'HIGH'
+      });
     }
-    if (state.hoursData.onDuty > 14) {
-      violations.push({ type: 'ON_DUTY', message: 'On-duty time exceeds 14 hours' });
+    
+    if (state.hoursData.totalDuty > 14) {
+      violations.push({ 
+        type: 'DUTY_TIME', 
+        message: `On-duty time exceeds 14 hours (${state.hoursData.totalDuty.toFixed(1)}h)`,
+        severity: 'HIGH'
+      });
     }
+    
+    if (state.hoursData.drive > 10.5) {
+      violations.push({ 
+        type: 'DRIVE_WARNING', 
+        message: `Approaching 11-hour drive limit (${state.hoursData.drive.toFixed(1)}h)`,
+        severity: 'MEDIUM'
+      });
+    }
+    
+    if (state.hoursData.totalDuty > 13.5) {
+      violations.push({ 
+        type: 'DUTY_WARNING', 
+        message: `Approaching 14-hour duty limit (${state.hoursData.totalDuty.toFixed(1)}h)`,
+        severity: 'MEDIUM'
+      });
+    }
+    
     dispatch({ type: 'SET_VIOLATIONS', payload: violations });
   };
 
-  const changeStatus = (newStatus) => {
+  const login = (userInfo) => {
+    dispatch({ type: 'LOGIN', payload: userInfo });
+  };
+
+  const logout = () => {
+    AsyncStorage.removeItem('appState');
+    dispatch({ type: 'LOGOUT' });
+  };
+
+  const changeStatus = (newStatus, additionalInfo = {}) => {
     const now = new Date();
     const newEntry = {
-      id: state.logEntries.length + 1,
-      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      id: Date.now(),
+      timestamp: now.toISOString(),
+      time: now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true 
+      }),
+      date: now.toLocaleDateString('en-US'),
       status: newStatus,
-      location: state.location,
-      odometer: state.odometer,
-      notes: `Changed to ${newStatus.replace('_', ' ')}`
+      location: additionalInfo.location || state.location,
+      odometer: additionalInfo.odometer || state.odometer,
+      notes: additionalInfo.notes || `Status changed to ${newStatus.replace('_', ' ')}`,
+      driverName: state.driverInfo.name
     };
+    
     dispatch({ type: 'ADD_LOG_ENTRY', payload: newEntry });
     dispatch({ type: 'SET_STATUS', payload: newStatus });
+    
+    if (additionalInfo.location) {
+      dispatch({ type: 'UPDATE_LOCATION', payload: additionalInfo.location });
+    }
+    
+    if (additionalInfo.odometer) {
+      dispatch({ type: 'UPDATE_ODOMETER', payload: additionalInfo.odometer });
+    }
+  };
+
+  const addInspection = (inspectionData) => {
+    const newInspection = {
+      id: Date.now(),
+      ...inspectionData,
+      timestamp: new Date().toISOString()
+    };
+    
+    dispatch({ type: 'ADD_INSPECTION', payload: newInspection });
   };
 
   const value = {
     state,
     dispatch,
-    changeStatus
+    login,
+    logout,
+    changeStatus,
+    addInspection
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
