@@ -6,6 +6,7 @@ import DashboardScreen from '../screens/DashboardScreen';
 import LogsScreen from '../screens/LogsScreen';
 import InspectionScreen from '../screens/InspectionScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import RoadsideInspectionScreen from '../screens/RoadsideInspectionScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -17,6 +18,7 @@ const AppNavigator = () => {
         <Stack.Screen name="Logs" component={LogsScreen} />
         <Stack.Screen name="Inspection" component={InspectionScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="RoadsideInspection" component={RoadsideInspectionScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

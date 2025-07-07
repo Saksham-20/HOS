@@ -1,6 +1,7 @@
 // App.js
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import RoadsideInspectionScreen from './src/screens/RoadsideInspectionScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -55,6 +56,8 @@ export default function App() {
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="RoadsideInspection" component={RoadsideInspectionScreen} />
+
           </Stack.Navigator>
         </NavigationContainer>
       </AppProvider>
