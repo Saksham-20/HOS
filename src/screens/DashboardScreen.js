@@ -7,9 +7,13 @@ import ViolationAlert from '../components/ViolationAlert';
 import StatusButtons from '../components/StatusButtons';
 import VehicleInfo from '../components/VehicleInfo';
 import { useApp } from '../context/AppContext';
+import { useNavigation } from '@react-navigation/native';
+
 
 const DashboardScreen = () => {
   const { state } = useApp();
+  const navigation = useNavigation();
+
 
   return (
     <SafeAreaView style={styles.container}>
