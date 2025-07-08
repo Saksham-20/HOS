@@ -54,7 +54,7 @@ export default function App() {
         <NavigationContainer>
           <StatusBar barStyle="light-content" backgroundColor="#2563eb" />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
+            {/* <Stack.Screen name="Login" component={LoginScreen} /> */}
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="RoadsideInspection" component={RoadsideInspectionScreen} />
 
