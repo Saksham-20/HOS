@@ -66,10 +66,14 @@ const appReducer = (state, action) => {
         hoursData: updatedHours
       };
     case 'ADD_LOG_ENTRY':
-      return { 
-        ...state, 
-        logEntries: [action.payload, ...state.logEntries] 
-      };
+      return {
+      ...state,
+     logEntries: [
+     { ...action.payload, submitted: false }, // 👈 add this
+      ...state.logEntries,
+    ],
+  };
+
     case 'UPDATE_LOCATION':
       return { 
         ...state, 
@@ -97,6 +101,19 @@ const appReducer = (state, action) => {
         currentTime: new Date(),
         statusStartTime: action.payload.statusStartTime ? new Date(action.payload.statusStartTime) : new Date()
       };
+      
+    case 'UPDATE_LOG_ENTRY':
+  const updatedLogs = [...state.logEntries];
+  updatedLogs[action.payload.index] = {
+    ...updatedLogs[action.payload.index],
+    ...action.payload.updatedData
+  };
+  return {
+    ...state,
+    logEntries: updatedLogs
+  };
+
+
     default:
       return state;
   }
@@ -195,16 +212,27 @@ export const AppProvider = ({ children }) => {
   }, [state.hoursData]);
 
   const loadState = async () => {
-    try {
-      const savedState = await AsyncStorage.getItem('appState');
-      if (savedState) {
-        const parsed = JSON.parse(savedState);
-        dispatch({ type: 'LOAD_STATE', payload: parsed });
+  try {
+    const savedState = await AsyncStorage.getItem('appState');
+    if (savedState) {
+      const parsed = JSON.parse(savedState);
+
+      // 🔁 Migrate old logEntries: add submitted: false if missing
+      if (Array.isArray(parsed.logEntries)) {
+        parsed.logEntries = parsed.logEntries.map(entry => ({
+          submitted: false,
+          ...entry,
+          submitted: entry.submitted ?? false // ← preserve if exists
+        }));
       }
-    } catch (error) {
-      console.error('Error loading state:', error);
+
+      dispatch({ type: 'LOAD_STATE', payload: parsed });
     }
-  };
+  } catch (error) {
+    console.error('Error loading state:', error);
+  }
+};
+
 
   const saveState = async () => {
     try {
@@ -269,20 +297,22 @@ export const AppProvider = ({ children }) => {
   const changeStatus = (newStatus, additionalInfo = {}) => {
     const now = new Date();
     const newEntry = {
-      id: Date.now(),
-      timestamp: now.toISOString(),
-      time: now.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        hour12: true 
-      }),
-      date: now.toLocaleDateString('en-US'),
-      status: newStatus,
-      location: additionalInfo.location || state.location,
-      odometer: additionalInfo.odometer || state.odometer,
-      notes: additionalInfo.notes || `Status changed to ${newStatus.replace('_', ' ')}`,
-      driverName: state.driverInfo.name
-    };
+  id: Date.now(),
+  timestamp: now.toISOString(),
+  time: now.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: true 
+  }),
+  date: now.toLocaleDateString('en-US'),
+  status: newStatus,
+  location: additionalInfo.location || state.location,
+  odometer: additionalInfo.odometer || state.odometer,
+  notes: additionalInfo.notes || `Status changed to ${newStatus.replace('_', ' ')}`,
+  driverName: state.driverInfo.name,
+  submitted: false // ✅ <–– Add this
+};
+
     
     dispatch({ type: 'ADD_LOG_ENTRY', payload: newEntry });
     dispatch({ type: 'SET_STATUS', payload: newStatus });
