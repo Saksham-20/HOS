@@ -9,12 +9,12 @@ const initialState = {
   currentStatus: 'OFF_DUTY',
   currentTime: new Date(),
   statusStartTime: new Date(),
-  odometer: 125840,
-  location: 'Dallas, TX',
+  odometer: 0,
+  location: '',
   hoursData: {
     drive: 0,
     onDuty: 0,
-    offDuty: 10,
+    offDuty: 0,
     sleeper: 0,
     totalDuty: 0,
     remaining: {

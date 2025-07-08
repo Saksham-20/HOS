@@ -1,5 +1,6 @@
 // App.js
 import React from 'react';
+
 import { NavigationContainer } from '@react-navigation/native';
 import RoadsideInspectionScreen from './src/screens/RoadsideInspectionScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -7,7 +8,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-
+import TestHoursCard from './src/components/TestHoursCard';
 import DashboardScreen from './src/screens/DashboardScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import InspectionScreen from './src/screens/InspectionScreen';
@@ -54,7 +55,7 @@ export default function App() {
         <NavigationContainer>
           <StatusBar barStyle="light-content" backgroundColor="#2563eb" />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
+            {/* <Stack.Screen name="Login" component={LoginScreen} /> */}
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="RoadsideInspection" component={RoadsideInspectionScreen} />
 

@@ -17,30 +17,68 @@ import { useApp } from '../context/AppContext';
 
 const LoginScreen = ({ navigation }) => {
   const { login } = useApp();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    name: '',
+    license: '',
+    carrier: '',
+    truck: '',
+    startingOdometer: '',
+    startingLocation: ''
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  const handleLogin = async () => {
-    if (!username || !password) {
-      Alert.alert('Error', 'Please enter both username and password');
-      return;
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const validateForm = () => {
+    const required = isRegistering 
+      ? ['username', 'password', 'name', 'license', 'carrier', 'truck', 'startingOdometer', 'startingLocation']
+      : ['username', 'password'];
+    
+    for (const field of required) {
+      if (!formData[field] || formData[field].toString().trim() === '') {
+        Alert.alert('Error', `Please fill in all required fields`);
+        return false;
+      }
     }
+
+    if (isRegistering) {
+      const odometer = parseInt(formData.startingOdometer);
+      if (isNaN(odometer) || odometer < 0) {
+        Alert.alert('Error', 'Please enter a valid odometer reading');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
 
     setLoading(true);
 
     // Simulate API call delay
     setTimeout(() => {
-      if (username.toLowerCase() === 'driver' && password === 'password') {
-        // Save login info to context
+      if (isRegistering) {
+        // Register new driver
         login({
-          id: 1,
-          name: 'John Smith',
-          license: 'TX123456789',
-          carrier: 'ABC Trucking LLC',
-          truck: 'Unit 145',
-          username: username
+          id: Date.now(),
+          name: formData.name.trim(),
+          license: formData.license.trim(),
+          carrier: formData.carrier.trim(),
+          truck: formData.truck.trim(),
+          username: formData.username.trim(),
+          startingOdometer: parseInt(formData.startingOdometer),
+          startingLocation: formData.startingLocation.trim()
         });
 
         // Navigate to Main tab navigator
@@ -48,12 +86,28 @@ const LoginScreen = ({ navigation }) => {
           index: 0,
           routes: [{ name: 'Main' }]
         });
-
       } else {
-        Alert.alert('Login Failed', 'Invalid username or password');
+        // For demo purposes, accept any username/password for existing users
+        // In a real app, this would validate against a database
+        Alert.alert('Login Failed', 'Invalid credentials. Please register first or check your username/password.');
       }
       setLoading(false);
     }, 1000);
+  };
+
+  const toggleMode = () => {
+    setIsRegistering(!isRegistering);
+    // Clear form when switching modes
+    setFormData({
+      username: '',
+      password: '',
+      name: '',
+      license: '',
+      carrier: '',
+      truck: '',
+      startingOdometer: '',
+      startingLocation: ''
+    });
   };
 
   return (
@@ -70,13 +124,17 @@ const LoginScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.form}>
+            <Text style={styles.formTitle}>
+              {isRegistering ? 'Register New Driver' : 'Login'}
+            </Text>
+
             <View style={styles.inputContainer}>
               <Icon name="person" size={24} color="#6b7280" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Username"
-                value={username}
-                onChangeText={setUsername}
+                value={formData.username}
+                onChangeText={(value) => handleInputChange('username', value)}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
@@ -87,8 +145,8 @@ const LoginScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
+                value={formData.password}
+                onChangeText={(value) => handleInputChange('password', value)}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -105,21 +163,91 @@ const LoginScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
+            {isRegistering && (
+              <>
+                <View style={styles.inputContainer}>
+                  <Icon name="badge" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Full Name"
+                    value={formData.name}
+                    onChangeText={(value) => handleInputChange('name', value)}
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="credit-card" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Driver License Number"
+                    value={formData.license}
+                    onChangeText={(value) => handleInputChange('license', value)}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="business" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Carrier/Company Name"
+                    value={formData.carrier}
+                    onChangeText={(value) => handleInputChange('carrier', value)}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="local-shipping" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Truck Unit Number"
+                    value={formData.truck}
+                    onChangeText={(value) => handleInputChange('truck', value)}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="speed" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Starting Odometer Reading"
+                    value={formData.startingOdometer}
+                    onChangeText={(value) => handleInputChange('startingOdometer', value)}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="location-on" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Starting Location"
+                    value={formData.startingLocation}
+                    onChangeText={(value) => handleInputChange('startingLocation', value)}
+                  />
+                </View>
+              </>
+            )}
+
             <TouchableOpacity
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
+              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+              onPress={handleSubmit}
               disabled={loading}
             >
-              <Text style={styles.loginButtonText}>
-                {loading ? 'Logging in...' : 'Login'}
+              <Text style={styles.submitButtonText}>
+                {loading ? 'Processing...' : (isRegistering ? 'Register' : 'Login')}
               </Text>
             </TouchableOpacity>
 
-            <View style={styles.demoInfo}>
-              <Text style={styles.demoTitle}>Demo Credentials:</Text>
-              <Text style={styles.demoText}>Username: driver</Text>
-              <Text style={styles.demoText}>Password: password</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={toggleMode}
+            >
+              <Text style={styles.toggleButtonText}>
+                {isRegistering ? 'Already have an account? Login' : 'New driver? Register here'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -142,7 +270,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 32,
   },
   title: {
     fontSize: 32,
@@ -164,6 +292,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  formTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 24,
+    textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -187,7 +322,7 @@ const styles = StyleSheet.create({
   eyeIcon: {
     padding: 8,
   },
-  loginButton: {
+  submitButton: {
     backgroundColor: '#2563eb',
     borderRadius: 8,
     height: 50,
@@ -195,30 +330,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  loginButtonDisabled: {
+  submitButtonDisabled: {
     backgroundColor: '#9ca3af',
   },
-  loginButtonText: {
+  submitButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
-  demoInfo: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 24,
+  toggleButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
   },
-  demoTitle: {
+  toggleButtonText: {
+    color: '#2563eb',
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  demoText: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginBottom: 4,
   },
 });
 
