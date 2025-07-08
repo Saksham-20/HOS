@@ -1,4 +1,4 @@
-// src/screens/LoginScreen.js
+// src/screens/LoginScreen.js - Updated to use API
 import React, { useState } from 'react';
 import { 
   View, 
@@ -9,26 +9,26 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
 
 const LoginScreen = ({ navigation }) => {
-  const { login } = useApp();
+  const { login, register, state } = useApp();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
-    name: '',
-    license: '',
-    carrier: '',
-    truck: '',
-    startingOdometer: '',
-    startingLocation: ''
+    fullName: '',
+    licenseNumber: '',
+    licenseState: '',
+    carrierName: '',
+    truckNumber: '',
+    email: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
 
   const handleInputChange = (field, value) => {
@@ -40,7 +40,7 @@ const LoginScreen = ({ navigation }) => {
 
   const validateForm = () => {
     const required = isRegistering 
-      ? ['username', 'password', 'name', 'license', 'carrier', 'truck', 'startingOdometer', 'startingLocation']
+      ? ['username', 'password', 'fullName', 'licenseNumber', 'licenseState', 'carrierName', 'truckNumber']
       : ['username', 'password'];
     
     for (const field of required) {
@@ -50,12 +50,9 @@ const LoginScreen = ({ navigation }) => {
       }
     }
 
-    if (isRegistering) {
-      const odometer = parseInt(formData.startingOdometer);
-      if (isNaN(odometer) || odometer < 0) {
-        Alert.alert('Error', 'Please enter a valid odometer reading');
-        return false;
-      }
+    if (formData.password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return false;
     }
 
     return true;
@@ -64,49 +61,40 @@ const LoginScreen = ({ navigation }) => {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    setLoading(true);
-
-    // Simulate API call delay
-    setTimeout(() => {
-      if (isRegistering) {
-        // Register new driver
-        login({
-          id: Date.now(),
-          name: formData.name.trim(),
-          license: formData.license.trim(),
-          carrier: formData.carrier.trim(),
-          truck: formData.truck.trim(),
-          username: formData.username.trim(),
-          startingOdometer: parseInt(formData.startingOdometer),
-          startingLocation: formData.startingLocation.trim()
-        });
-
-        // Navigate to Main tab navigator
+    if (isRegistering) {
+      const result = await register(formData);
+      if (result.success) {
         navigation.reset({
           index: 0,
           routes: [{ name: 'Main' }]
         });
       } else {
-        // For demo purposes, accept any username/password for existing users
-        // In a real app, this would validate against a database
-        Alert.alert('Login Failed', 'Invalid credentials. Please register first or check your username/password.');
+        Alert.alert('Registration Failed', result.message);
       }
-      setLoading(false);
-    }, 1000);
+    } else {
+      const result = await login(formData.username, formData.password);
+      if (result.success) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Main' }]
+        });
+      } else {
+        Alert.alert('Login Failed', result.message);
+      }
+    }
   };
 
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
-    // Clear form when switching modes
     setFormData({
       username: '',
       password: '',
-      name: '',
-      license: '',
-      carrier: '',
-      truck: '',
-      startingOdometer: '',
-      startingLocation: ''
+      fullName: '',
+      licenseNumber: '',
+      licenseState: '',
+      carrierName: '',
+      truckNumber: '',
+      email: ''
     });
   };
 
@@ -170,9 +158,21 @@ const LoginScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.input}
                     placeholder="Full Name"
-                    value={formData.name}
-                    onChangeText={(value) => handleInputChange('name', value)}
+                    value={formData.fullName}
+                    onChangeText={(value) => handleInputChange('fullName', value)}
                     autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="email" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email (Optional)"
+                    value={formData.email}
+                    onChangeText={(value) => handleInputChange('email', value)}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
                   />
                 </View>
 
@@ -181,9 +181,21 @@ const LoginScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.input}
                     placeholder="Driver License Number"
-                    value={formData.license}
-                    onChangeText={(value) => handleInputChange('license', value)}
+                    value={formData.licenseNumber}
+                    onChangeText={(value) => handleInputChange('licenseNumber', value)}
                     autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Icon name="map" size={24} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="License State (e.g., CA)"
+                    value={formData.licenseState}
+                    onChangeText={(value) => handleInputChange('licenseState', value.toUpperCase())}
+                    autoCapitalize="characters"
+                    maxLength={2}
                   />
                 </View>
 
@@ -192,8 +204,8 @@ const LoginScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.input}
                     placeholder="Carrier/Company Name"
-                    value={formData.carrier}
-                    onChangeText={(value) => handleInputChange('carrier', value)}
+                    value={formData.carrierName}
+                    onChangeText={(value) => handleInputChange('carrierName', value)}
                   />
                 </View>
 
@@ -202,43 +214,30 @@ const LoginScreen = ({ navigation }) => {
                   <TextInput
                     style={styles.input}
                     placeholder="Truck Unit Number"
-                    value={formData.truck}
-                    onChangeText={(value) => handleInputChange('truck', value)}
-                  />
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Icon name="speed" size={24} color="#6b7280" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Starting Odometer Reading"
-                    value={formData.startingOdometer}
-                    onChangeText={(value) => handleInputChange('startingOdometer', value)}
-                    keyboardType="numeric"
-                  />
-                </View>
-
-                <View style={styles.inputContainer}>
-                  <Icon name="location-on" size={24} color="#6b7280" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Starting Location"
-                    value={formData.startingLocation}
-                    onChangeText={(value) => handleInputChange('startingLocation', value)}
+                    value={formData.truckNumber}
+                    onChangeText={(value) => handleInputChange('truckNumber', value)}
                   />
                 </View>
               </>
             )}
 
             <TouchableOpacity
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+              style={[styles.submitButton, state.isLoading && styles.submitButtonDisabled]}
               onPress={handleSubmit}
-              disabled={loading}
+              disabled={state.isLoading}
             >
-              <Text style={styles.submitButtonText}>
-                {loading ? 'Processing...' : (isRegistering ? 'Register' : 'Login')}
-              </Text>
+              {state.isLoading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.submitButtonText}>
+                  {isRegistering ? 'Register' : 'Login'}
+                </Text>
+              )}
             </TouchableOpacity>
+
+            {state.error && (
+              <Text style={styles.errorText}>{state.error}</Text>
+            )}
 
             <TouchableOpacity
               style={styles.toggleButton}
@@ -337,6 +336,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
   },
   toggleButton: {
     marginTop: 20,

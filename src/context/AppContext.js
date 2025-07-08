@@ -1,11 +1,13 @@
-// src/context/AppContext.js
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ApiService from '../services/api';
 
 const AppContext = createContext();
 
 const initialState = {
   isLoggedIn: false,
+  isLoading: false,
+  error: null,
   currentStatus: 'OFF_DUTY',
   currentTime: new Date(),
   statusStartTime: new Date(),
@@ -39,310 +41,333 @@ const initialState = {
 
 const appReducer = (state, action) => {
   switch (action.type) {
-    case 'LOGIN':
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'LOGIN_SUCCESS':
       return { 
         ...state, 
         isLoggedIn: true, 
-        driverInfo: action.payload 
+        driverInfo: action.payload,
+        error: null 
       };
     case 'LOGOUT':
-      return { 
-        ...initialState, 
-        isLoggedIn: false 
-      };
+      return { ...initialState };
     case 'SET_STATUS':
-      const newHours = calculateHours(state, action.payload);
       return { 
         ...state, 
-        currentStatus: action.payload,
+        currentStatus: action.payload.status,
         statusStartTime: new Date(),
-        hoursData: newHours
+        location: action.payload.location,
+        odometer: action.payload.odometer
       };
-    case 'UPDATE_TIME':
-      const updatedHours = updateCurrentHours(state);
+    case 'UPDATE_HOURS':
       return { 
         ...state, 
-        currentTime: action.payload,
-        hoursData: updatedHours
+        hoursData: action.payload 
       };
-    case 'ADD_LOG_ENTRY':
+    case 'SET_LOGS':
+      return { 
+        ...state, 
+        logEntries: action.payload 
+      };
+    case 'UPDATE_LOG_ENTRY':
+      const updatedLogs = [...state.logEntries];
+      updatedLogs[action.payload.index] = {
+        ...updatedLogs[action.payload.index],
+        ...action.payload.updatedData
+      };
       return {
-      ...state,
-     logEntries: [
-     { ...action.payload, submitted: false }, // 👈 add this
-      ...state.logEntries,
-    ],
-  };
-
-    case 'UPDATE_LOCATION':
-      return { 
-        ...state, 
-        location: action.payload 
-      };
-    case 'UPDATE_ODOMETER':
-      return { 
-        ...state, 
-        odometer: action.payload 
+        ...state,
+        logEntries: updatedLogs
       };
     case 'SET_VIOLATIONS':
       return { 
         ...state, 
         violations: action.payload 
       };
-    case 'ADD_INSPECTION':
+    case 'SET_INSPECTIONS':
       return { 
         ...state, 
-        inspections: [action.payload, ...state.inspections] 
+        inspections: action.payload 
       };
-    case 'LOAD_STATE':
+    case 'SET_WEEKLY_SUMMARY':
       return { 
         ...state, 
-        ...action.payload,
-        currentTime: new Date(),
-        statusStartTime: action.payload.statusStartTime ? new Date(action.payload.statusStartTime) : new Date()
+        weeklyData: action.payload 
       };
-      
-    case 'UPDATE_LOG_ENTRY':
-  const updatedLogs = [...state.logEntries];
-  updatedLogs[action.payload.index] = {
-    ...updatedLogs[action.payload.index],
-    ...action.payload.updatedData
-  };
-  return {
-    ...state,
-    logEntries: updatedLogs
-  };
-
-
+    case 'SET_CYCLE_INFO':
+      return { 
+        ...state, 
+        cycleData: action.payload 
+      };
     default:
       return state;
   }
 };
 
-const calculateHours = (state, newStatus) => {
-  const now = new Date();
-  const timeDiff = (now - new Date(state.statusStartTime)) / (1000 * 60 * 60); // hours
-  
-  const updatedHours = { ...state.hoursData };
-  
-  // Add time to the previous status
-  switch (state.currentStatus) {
-    case 'DRIVING':
-      updatedHours.drive += timeDiff;
-      updatedHours.totalDuty += timeDiff;
-      break;
-    case 'ON_DUTY':
-      updatedHours.onDuty += timeDiff;
-      updatedHours.totalDuty += timeDiff;
-      break;
-    case 'OFF_DUTY':
-      updatedHours.offDuty += timeDiff;
-      break;
-    case 'SLEEPER':
-      updatedHours.sleeper += timeDiff;
-      break;
-  }
-  
-  // Calculate remaining hours
-  updatedHours.remaining = {
-    drive: Math.max(0, 11 - updatedHours.drive),
-    duty: Math.max(0, 14 - updatedHours.totalDuty),
-    cycle: Math.max(0, 70 - (updatedHours.drive + updatedHours.onDuty))
-  };
-  
-  return updatedHours;
-};
-
-const updateCurrentHours = (state) => {
-  const now = new Date();
-  const timeDiff = (now - new Date(state.statusStartTime)) / (1000 * 60 * 60); // hours
-  
-  const updatedHours = { ...state.hoursData };
-  
-  // Add time to current status
-  switch (state.currentStatus) {
-    case 'DRIVING':
-      updatedHours.drive = state.hoursData.drive + timeDiff;
-      updatedHours.totalDuty = state.hoursData.totalDuty + timeDiff;
-      break;
-    case 'ON_DUTY':
-      updatedHours.onDuty = state.hoursData.onDuty + timeDiff;
-      updatedHours.totalDuty = state.hoursData.totalDuty + timeDiff;
-      break;
-    case 'OFF_DUTY':
-      updatedHours.offDuty = state.hoursData.offDuty + timeDiff;
-      break;
-    case 'SLEEPER':
-      updatedHours.sleeper = state.hoursData.sleeper + timeDiff;
-      break;
-  }
-  
-  // Calculate remaining hours
-  updatedHours.remaining = {
-    drive: Math.max(0, 11 - updatedHours.drive),
-    duty: Math.max(0, 14 - updatedHours.totalDuty),
-    cycle: Math.max(0, 70 - (updatedHours.drive + updatedHours.onDuty))
-  };
-  
-  return updatedHours;
-};
-
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  // Load saved auth state on app start
   useEffect(() => {
-    loadState();
+    checkAuthState();
   }, []);
 
+  // Update time every minute
   useEffect(() => {
     const timer = setInterval(() => {
       dispatch({ type: 'UPDATE_TIME', payload: new Date() });
-    }, 60000); // Update every minute
+    }, 60000);
     return () => clearInterval(timer);
   }, []);
 
+  // Fetch current data when logged in
   useEffect(() => {
     if (state.isLoggedIn) {
-      saveState();
+      fetchCurrentData();
     }
-  }, [state]);
+  }, [state.isLoggedIn]);
 
-  useEffect(() => {
-    checkViolations();
-  }, [state.hoursData]);
+  const checkAuthState = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (token) {
+        // Verify token and get profile
+        const profileResponse = await ApiService.getProfile();
+        if (profileResponse.success) {
+          dispatch({ 
+            type: 'LOGIN_SUCCESS', 
+            payload: profileResponse.driver 
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+    }
+  };
 
-  const loadState = async () => {
-  try {
-    const savedState = await AsyncStorage.getItem('appState');
-    if (savedState) {
-      const parsed = JSON.parse(savedState);
+  const fetchCurrentData = async () => {
+    try {
+      // Get today's logs and summary
+      const today = new Date().toISOString().split('T')[0];
+      const [logsResponse, summaryResponse, violationsResponse] = await Promise.all([
+        ApiService.getLogs({ date: today }),
+        ApiService.getDailySummary(today),
+        ApiService.getViolationSummary()
+      ]);
 
-      // 🔁 Migrate old logEntries: add submitted: false if missing
-      if (Array.isArray(parsed.logEntries)) {
-        parsed.logEntries = parsed.logEntries.map(entry => ({
-          submitted: false,
-          ...entry,
-          submitted: entry.submitted ?? false // ← preserve if exists
-        }));
+      if (logsResponse.success) {
+        dispatch({ type: 'SET_LOGS', payload: logsResponse.logs });
       }
 
-      dispatch({ type: 'LOAD_STATE', payload: parsed });
-    }
-  } catch (error) {
-    console.error('Error loading state:', error);
-  }
-};
-
-
-  const saveState = async () => {
-    try {
-      const stateToSave = {
-        ...state,
-        currentTime: state.currentTime.toISOString(),
-        statusStartTime: state.statusStartTime.toISOString()
-      };
-      await AsyncStorage.setItem('appState', JSON.stringify(stateToSave));
+      if (summaryResponse.success) {
+        dispatch({ type: 'UPDATE_HOURS', payload: {
+          drive: summaryResponse.summary.drive || 0,
+          onDuty: summaryResponse.summary.onDuty || 0,
+          offDuty: summaryResponse.summary.offDuty || 0,
+          sleeper: summaryResponse.summary.sleeper || 0,
+          totalDuty: summaryResponse.summary.totalDuty || 0,
+          remaining: summaryResponse.remaining
+        }});
+        
+        if (summaryResponse.violations) {
+          dispatch({ type: 'SET_VIOLATIONS', payload: summaryResponse.violations });
+        }
+      }
     } catch (error) {
-      console.error('Error saving state:', error);
+      console.error('Failed to fetch current data:', error);
     }
   };
 
-  const checkViolations = () => {
-    const violations = [];
+  const login = async (username, password) => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
     
-    if (state.hoursData.drive > 11) {
-      violations.push({ 
-        type: 'DRIVE_TIME', 
-        message: `Driving time exceeds 11 hours (${state.hoursData.drive.toFixed(1)}h)`,
-        severity: 'HIGH'
+    try {
+      const response = await ApiService.login(username, password);
+      
+      if (response.success) {
+        dispatch({ type: 'LOGIN_SUCCESS', payload: response.driver });
+        return { success: true };
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: response.message });
+        return { success: false, message: response.message };
+      }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: error.message });
+      return { success: false, message: error.message };
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
+  const register = async (userData) => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    
+    try {
+      const response = await ApiService.register(userData);
+      
+      if (response.success) {
+        // Auto-login after registration
+        return await login(userData.username, userData.password);
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: response.message });
+        return { success: false, message: response.message };
+      }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: error.message });
+      return { success: false, message: error.message };
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await ApiService.logout();
+    } finally {
+      dispatch({ type: 'LOGOUT' });
+    }
+  };
+
+  const changeStatus = async (newStatus, additionalInfo = {}) => {
+    try {
+      const response = await ApiService.changeStatus({
+        status: newStatus,
+        location: additionalInfo.location || state.location,
+        odometer: additionalInfo.odometer || state.odometer,
+        notes: additionalInfo.notes
       });
-    }
-    
-    if (state.hoursData.totalDuty > 14) {
-      violations.push({ 
-        type: 'DUTY_TIME', 
-        message: `On-duty time exceeds 14 hours (${state.hoursData.totalDuty.toFixed(1)}h)`,
-        severity: 'HIGH'
-      });
-    }
-    
-    if (state.hoursData.drive > 10.5) {
-      violations.push({ 
-        type: 'DRIVE_WARNING', 
-        message: `Approaching 11-hour drive limit (${state.hoursData.drive.toFixed(1)}h)`,
-        severity: 'MEDIUM'
-      });
-    }
-    
-    if (state.hoursData.totalDuty > 13.5) {
-      violations.push({ 
-        type: 'DUTY_WARNING', 
-        message: `Approaching 14-hour duty limit (${state.hoursData.totalDuty.toFixed(1)}h)`,
-        severity: 'MEDIUM'
-      });
-    }
-    
-    dispatch({ type: 'SET_VIOLATIONS', payload: violations });
-  };
 
-  const login = (userInfo) => {
-    dispatch({ type: 'LOGIN', payload: userInfo });
-  };
-
-  const logout = () => {
-    AsyncStorage.removeItem('appState');
-    dispatch({ type: 'LOGOUT' });
-  };
-
-  const changeStatus = (newStatus, additionalInfo = {}) => {
-    const now = new Date();
-    const newEntry = {
-  id: Date.now(),
-  timestamp: now.toISOString(),
-  time: now.toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    hour12: true 
-  }),
-  date: now.toLocaleDateString('en-US'),
-  status: newStatus,
-  location: additionalInfo.location || state.location,
-  odometer: additionalInfo.odometer || state.odometer,
-  notes: additionalInfo.notes || `Status changed to ${newStatus.replace('_', ' ')}`,
-  driverName: state.driverInfo.name,
-  submitted: false // ✅ <–– Add this
-};
-
-    
-    dispatch({ type: 'ADD_LOG_ENTRY', payload: newEntry });
-    dispatch({ type: 'SET_STATUS', payload: newStatus });
-    
-    if (additionalInfo.location) {
-      dispatch({ type: 'UPDATE_LOCATION', payload: additionalInfo.location });
-    }
-    
-    if (additionalInfo.odometer) {
-      dispatch({ type: 'UPDATE_ODOMETER', payload: additionalInfo.odometer });
+      if (response.success) {
+        dispatch({ 
+          type: 'SET_STATUS', 
+          payload: {
+            status: newStatus,
+            location: additionalInfo.location || state.location,
+            odometer: additionalInfo.odometer || state.odometer
+          }
+        });
+        
+        // Refresh logs and hours
+        await fetchCurrentData();
+        
+        return { success: true };
+      } else {
+        return { success: false, message: response.message };
+      }
+    } catch (error) {
+      return { success: false, message: error.message };
     }
   };
 
-  const addInspection = (inspectionData) => {
-    const newInspection = {
-      id: Date.now(),
-      ...inspectionData,
-      timestamp: new Date().toISOString()
-    };
-    
-    dispatch({ type: 'ADD_INSPECTION', payload: newInspection });
+  const updateLogEntry = async (index, updateData) => {
+    try {
+      const logEntry = state.logEntries[index];
+      const response = await ApiService.updateLog(logEntry.id, updateData);
+      
+      if (response.success) {
+        dispatch({
+          type: 'UPDATE_LOG_ENTRY',
+          payload: {
+            index,
+            updatedData: updateData
+          }
+        });
+        return { success: true };
+      }
+      return { success: false, message: response.message };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  };
+
+  const submitLogEntry = async (index) => {
+    try {
+      const logEntry = state.logEntries[index];
+      const response = await ApiService.submitLog(logEntry.id);
+      
+      if (response.success) {
+        dispatch({
+          type: 'UPDATE_LOG_ENTRY',
+          payload: {
+            index,
+            updatedData: { isSubmitted: true, submitted: true }
+          }
+        });
+        return { success: true };
+      }
+      return { success: false, message: response.message };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  };
+
+  const addInspection = async (inspectionData) => {
+    try {
+      const response = await ApiService.createInspection(inspectionData);
+      
+      if (response.success) {
+        // Refresh inspections
+        const inspectionsResponse = await ApiService.getInspections();
+        if (inspectionsResponse.success) {
+          dispatch({ 
+            type: 'SET_INSPECTIONS', 
+            payload: inspectionsResponse.inspections 
+          });
+        }
+        return { success: true, passed: response.passed };
+      }
+      return { success: false, message: response.message };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  };
+
+  const fetchWeeklySummary = async () => {
+    try {
+      const response = await ApiService.getWeeklySummary();
+      if (response.success) {
+        dispatch({ 
+          type: 'SET_WEEKLY_SUMMARY', 
+          payload: response.weekSummary 
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch weekly summary:', error);
+    }
+  };
+
+  const fetchCycleInfo = async () => {
+    try {
+      const response = await ApiService.getCycleInfo();
+      if (response.success) {
+        dispatch({ 
+          type: 'SET_CYCLE_INFO', 
+          payload: response.cycleInfo 
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch cycle info:', error);
+    }
   };
 
   const value = {
     state,
     dispatch,
     login,
+    register,
     logout,
     changeStatus,
-    addInspection
+    updateLogEntry,
+    submitLogEntry,
+    addInspection,
+    fetchWeeklySummary,
+    fetchCycleInfo,
+    refreshData: fetchCurrentData
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

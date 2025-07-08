@@ -1,20 +1,20 @@
-// App.js
-import React from 'react';
-
+// App.js - Updated with authentication flow
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import RoadsideInspectionScreen from './src/screens/RoadsideInspectionScreen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'react-native';
+import { StatusBar, View, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import TestHoursCard from './src/components/TestHoursCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import DashboardScreen from './src/screens/DashboardScreen';
 import LogsScreen from './src/screens/LogsScreen';
 import InspectionScreen from './src/screens/InspectionScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import LoginScreen from './src/screens/LoginScreen'; // Make sure this exists
-import { AppProvider } from './src/context/AppContext';
+import LoginScreen from './src/screens/LoginScreen';
+import RoadsideInspectionScreen from './src/screens/RoadsideInspectionScreen';
+import { AppProvider, useApp } from './src/context/AppContext';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -48,19 +48,67 @@ const MainTabs = () => (
   </Tab.Navigator>
 );
 
+// Navigation component that checks auth state
+const AppNavigator = () => {
+  const { state } = useApp();
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    checkAuthState();
+  }, []);
+
+  const checkAuthState = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      // Small delay to prevent flash
+      setTimeout(() => {
+        setIsChecking(false);
+      }, 500);
+    } catch (error) {
+      setIsChecking(false);
+    }
+  };
+
+  if (isChecking) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {state.isLoggedIn ? (
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen 
+              name="RoadsideInspection" 
+              component={RoadsideInspectionScreen}
+              options={{
+                headerShown: true,
+                headerStyle: { backgroundColor: '#2563eb' },
+                headerTintColor: '#fff',
+                headerTitle: 'Roadside Inspection',
+                headerTitleStyle: { fontWeight: 'bold' }
+              }}
+            />
+          </>
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <AppProvider>
-        <NavigationContainer>
-          <StatusBar barStyle="light-content" backgroundColor="#2563eb" />
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            {/* <Stack.Screen name="Login" component={LoginScreen} /> */}
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="RoadsideInspection" component={RoadsideInspectionScreen} />
-
-          </Stack.Navigator>
-        </NavigationContainer>
+        <StatusBar barStyle="light-content" backgroundColor="#2563eb" />
+        <AppNavigator />
       </AppProvider>
     </SafeAreaProvider>
   );

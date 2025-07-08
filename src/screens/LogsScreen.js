@@ -1,47 +1,105 @@
-import React, { useState } from 'react';
+// src/screens/LogsScreen.js
+import React, { useState, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity, 
+  ActivityIndicator,
+  RefreshControl,
+  Alert 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import LogEntry from '../components/LogEntry';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
 
 const LogsScreen = () => {
-  const { state, dispatch } = useApp();
+  const { state, updateLogEntry, submitLogEntry, refreshData } = useApp();
   const navigation = useNavigation();
   const [editingIndex, setEditingIndex] = useState(null);
   const [editedEntry, setEditedEntry] = useState({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Refresh data on screen focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      handleRefresh();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+    } catch (error) {
+      console.error('Error refreshing logs:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleEdit = (index, entry) => {
     setEditingIndex(index);
     setEditedEntry({ 
-      status: entry.status, 
-      location: entry.location 
+      location: entry.location,
+      notes: entry.notes || ''
     });
   };
 
-  const handleSave = (index) => {
-    dispatch({
-      type: 'UPDATE_LOG_ENTRY',
-      payload: {
-        index,
-        updatedData: editedEntry
+  const handleSave = async (index) => {
+    setIsLoading(true);
+    try {
+      const result = await updateLogEntry(index, editedEntry);
+      
+      if (result.success) {
+        Alert.alert('Success', 'Log entry updated successfully');
+        setEditingIndex(null);
+        setEditedEntry({});
+      } else {
+        Alert.alert('Error', result.message || 'Failed to update log entry');
       }
-    });
-    setEditingIndex(null);
-    setEditedEntry({});
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update log entry');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSubmit = (index) => {
-    // Mark this entry as submitted
-    dispatch({
-      type: 'UPDATE_LOG_ENTRY',
-      payload: {
-        index,
-        updatedData: { ...state.logEntries[index], isSubmitted: true }
-      }
-    });
-    setEditingIndex(null);
-    setEditedEntry({});
+  const handleSubmit = async (index) => {
+    Alert.alert(
+      'Confirm Submit',
+      'Once submitted, this log entry cannot be edited. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              const result = await submitLogEntry(index);
+              
+              if (result.success) {
+                Alert.alert('Success', 'Log entry submitted successfully');
+                setEditingIndex(null);
+                setEditedEntry({});
+              } else {
+                Alert.alert('Error', result.message || 'Failed to submit log entry');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to submit log entry');
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleCancel = () => {
@@ -49,88 +107,263 @@ const LogsScreen = () => {
     setEditedEntry({});
   };
 
+  const formatDateTime = (timestamp) => {
+    if (!timestamp) return { date: '--', time: '--:--' };
+    
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+    const timeStr = date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
+    return { date: dateStr, time: timeStr };
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'DRIVING': return '#10b981';
+      case 'ON_DUTY': return '#f59e0b';
+      case 'SLEEPER': return '#3b82f6';
+      case 'OFF_DUTY': return '#6b7280';
+      default: return '#6b7280';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'DRIVING': return 'local-shipping';
+      case 'ON_DUTY': return 'work';
+      case 'SLEEPER': return 'hotel';
+      case 'OFF_DUTY': return 'home';
+      default: return 'help';
+    }
+  };
+
+  const calculateDuration = (entry) => {
+    if (!entry.start_time) return '--';
+    
+    const start = new Date(entry.start_time);
+    const end = entry.end_time ? new Date(entry.end_time) : new Date();
+    const diffMs = end - start;
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  if (state.isLoading && state.logEntries.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#2563eb" />
+          <Text style={styles.loadingText}>Loading logs...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Daily Logs</Text>
+          <Text style={styles.headerSubtitle}>
+            {new Date().toLocaleDateString('en-US', { 
+              weekday: 'long', 
+              month: 'long', 
+              day: 'numeric' 
+            })}
+          </Text>
+        </View>
         <TouchableOpacity
           style={styles.inspectButton}
           onPress={() => navigation.navigate('RoadsideInspection')}
         >
-          <Text style={styles.inspectText}>Roadside Inspection</Text>
+          <Icon name="fact-check" size={20} color="#ffffff" />
+          <Text style={styles.inspectText}>Roadside</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollView}>
-        {state.logEntries.map((entry, index) => (
-          <View key={entry.id || index} style={styles.logItem}>
-            {editingIndex === index ? (
-              // Edit mode
-              <>
-                <View style={styles.editContainer}>
-                  <View style={styles.inputContainer}>
-                    <TextInput
-                      style={styles.input}
-                      value={editedEntry.status}
-                      placeholder="Status"
-                      onChangeText={(text) => setEditedEntry({ ...editedEntry, status: text })}
-                    />
-                    <TextInput
-                      style={styles.input}
-                      value={editedEntry.location}
-                      placeholder="Location"
-                      onChangeText={(text) => setEditedEntry({ ...editedEntry, location: text })}
-                    />
-                  </View>
-                </View>
-                <View style={styles.editActions}>
-                  <TouchableOpacity
-                    style={styles.saveButton}
-                    onPress={() => handleSave(index)}
-                  >
-                    <Text style={styles.buttonText}>Save</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={handleCancel}
-                  >
-                    <Text style={styles.buttonText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-                {/* Individual Submit Button */}
-                <TouchableOpacity
-                  style={styles.submitButton}
-                  onPress={() => handleSubmit(index)}
-                >
-                  <Text style={styles.submitButtonText}>Submit</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              // View mode
-              <View style={styles.logContent}>
-                <View style={styles.logDetails}>
-                  <Text style={styles.time}>{entry.time}</Text>
-                  <Text style={styles.status}>{entry.status}</Text>
-                  <Text style={styles.location}>{entry.location}</Text>
-                  {entry.isSubmitted && (
-                    <Text style={styles.submittedText}>✓ Submitted</Text>
-                  )}
-                </View>
-                <View style={styles.actionContainer}>
-                  {!entry.isSubmitted ? (
-                    <TouchableOpacity
-                      style={styles.editButton}
-                      onPress={() => handleEdit(index, entry)}
-                    >
-                      <Text style={styles.editButtonText}>Edit</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <Text style={styles.lockedText}>Locked</Text>
-                  )}
-                </View>
-              </View>
-            )}
+      <ScrollView 
+        contentContainerStyle={styles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#2563eb']}
+          />
+        }
+      >
+        {state.logEntries.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="event-note" size={64} color="#d1d5db" />
+            <Text style={styles.emptyText}>No log entries for today</Text>
+            <Text style={styles.emptySubtext}>
+              Change your status to create a log entry
+            </Text>
           </View>
-        ))}
+        ) : (
+          state.logEntries.map((entry, index) => {
+            const { date, time } = formatDateTime(entry.start_time || entry.timestamp);
+            const isCurrentStatus = !entry.end_time;
+            
+            return (
+              <View 
+                key={entry.id || index} 
+                style={[
+                  styles.logItem,
+                  isCurrentStatus && styles.currentLogItem
+                ]}
+              >
+                {editingIndex === index ? (
+                  // Edit mode
+                  <View style={styles.editMode}>
+                    <View style={styles.editHeader}>
+                      <Icon 
+                        name={getStatusIcon(entry.status || entry.status_code)} 
+                        size={24} 
+                        color={getStatusColor(entry.status || entry.status_code)} 
+                      />
+                      <Text style={styles.editTitle}>Edit Log Entry</Text>
+                    </View>
+                    
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Location</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editedEntry.location}
+                        placeholder="Enter location"
+                        onChangeText={(text) => setEditedEntry({ ...editedEntry, location: text })}
+                      />
+                    </View>
+                    
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Notes</Text>
+                      <TextInput
+                        style={[styles.input, styles.notesInput]}
+                        value={editedEntry.notes}
+                        placeholder="Add notes (optional)"
+                        onChangeText={(text) => setEditedEntry({ ...editedEntry, notes: text })}
+                        multiline
+                        numberOfLines={3}
+                      />
+                    </View>
+                    
+                    <View style={styles.editActions}>
+                      <TouchableOpacity
+                        style={[styles.button, styles.cancelButton]}
+                        onPress={handleCancel}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[styles.button, styles.saveButton]}
+                        onPress={() => handleSave(index)}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <Text style={styles.saveButtonText}>Save</Text>
+                        )}
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[styles.button, styles.submitButton]}
+                        onPress={() => handleSubmit(index)}
+                        disabled={isLoading}
+                      >
+                        <Text style={styles.submitButtonText}>Submit</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  // View mode
+                  <View style={styles.logContent}>
+                    <View style={styles.logHeader}>
+                      <View style={styles.statusInfo}>
+                        <Icon 
+                          name={getStatusIcon(entry.status || entry.status_code)} 
+                          size={24} 
+                          color={getStatusColor(entry.status || entry.status_code)} 
+                        />
+                        <View style={styles.statusTextContainer}>
+                          <Text style={styles.statusText}>
+                            {(entry.status || entry.status_code || 'UNKNOWN').replace('_', ' ')}
+                          </Text>
+                          {isCurrentStatus && (
+                            <View style={styles.currentBadge}>
+                              <Text style={styles.currentBadgeText}>CURRENT</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                      
+                      <View style={styles.timeInfo}>
+                        <Text style={styles.time}>{time}</Text>
+                        <Text style={styles.duration}>{calculateDuration(entry)}</Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.logDetails}>
+                      <View style={styles.detailRow}>
+                        <Icon name="location-on" size={16} color="#6b7280" />
+                        <Text style={styles.location}>{entry.location || 'No location'}</Text>
+                      </View>
+                      
+                      {entry.odometer_start && (
+                        <View style={styles.detailRow}>
+                          <Icon name="speed" size={16} color="#6b7280" />
+                          <Text style={styles.odometer}>
+                            {entry.odometer_start} mi
+                            {entry.odometer_end && ` - ${entry.odometer_end} mi`}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      {entry.notes && (
+                        <View style={styles.detailRow}>
+                          <Icon name="note" size={16} color="#6b7280" />
+                          <Text style={styles.notes}>{entry.notes}</Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    <View style={styles.logFooter}>
+                      <Text style={styles.date}>{date}</Text>
+                      
+                      {entry.isSubmitted || entry.is_submitted ? (
+                        <View style={styles.submittedBadge}>
+                          <Icon name="check-circle" size={16} color="#10b981" />
+                          <Text style={styles.submittedText}>Submitted</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.editButton}
+                          onPress={() => handleEdit(index, entry)}
+                        >
+                          <Icon name="edit" size={16} color="#2563eb" />
+                          <Text style={styles.editButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -139,135 +372,262 @@ const LogsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb'
+    backgroundColor: '#f3f4f6'
   },
-  scrollView: {
-    padding: 16
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6b7280'
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderColor: '#e5e7eb',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center'
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827'
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 2
   },
   inspectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#2563eb',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6
   },
   inspectText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
   },
+  scrollView: {
+    padding: 16
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 64
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 16
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 8
+  },
   logItem: {
     backgroundColor: '#ffffff',
-    padding: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb'
+    marginBottom: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    overflow: 'hidden'
+  },
+  currentLogItem: {
+    borderWidth: 2,
+    borderColor: '#3b82f6'
   },
   logContent: {
+    padding: 16
+  },
+  logHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'flex-start',
+    marginBottom: 12
   },
-  logDetails: {
+  statusInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1
+  },
+  statusTextContainer: {
+    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  statusText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    textTransform: 'capitalize'
+  },
+  currentBadge: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4
+  },
+  currentBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2563eb'
+  },
+  timeInfo: {
+    alignItems: 'flex-end'
   },
   time: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4
+    color: '#111827'
   },
-  status: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 2
+  duration: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2
+  },
+  logDetails: {
+    gap: 8
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6
   },
   location: {
     fontSize: 14,
+    color: '#374151',
+    flex: 1
+  },
+  odometer: {
+    fontSize: 14,
+    color: '#374151'
+  },
+  notes: {
+    fontSize: 14,
     color: '#6b7280',
-    marginBottom: 4
+    fontStyle: 'italic',
+    flex: 1
+  },
+  logFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6'
+  },
+  date: {
+    fontSize: 12,
+    color: '#9ca3af'
+  },
+  submittedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
   },
   submittedText: {
     fontSize: 12,
     color: '#10b981',
     fontWeight: '600'
   },
-  actionContainer: {
-    alignItems: 'flex-end',
-    marginLeft: 16
-  },
   editButton: {
-    backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6
+    borderRadius: 6,
+    backgroundColor: '#eff6ff'
   },
   editButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ffffff'
+    fontSize: 12,
+    color: '#2563eb',
+    fontWeight: '600'
   },
-  lockedText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9ca3af'
+  editMode: {
+    padding: 16
   },
-  editContainer: {
-    marginBottom: 12
+  editHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16
+  },
+  editTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827'
   },
   inputContainer: {
-    gap: 8
+    marginBottom: 16
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6
   },
   input: {
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 6,
+    borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#f9fafb'
+  },
+  notesInput: {
+    minHeight: 80,
+    textAlignVertical: 'top'
   },
   editActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     gap: 8,
-    marginBottom: 12
+    marginTop: 8
   },
-  saveButton: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6
+  button: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   cancelButton: {
-    backgroundColor: '#6b7280',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6
+    backgroundColor: '#f3f4f6'
   },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600'
+  saveButton: {
+    backgroundColor: '#10b981'
   },
   submitButton: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 6,
-    alignItems: 'center'
+    backgroundColor: '#ef4444'
+  },
+  cancelButtonText: {
+    color: '#374151',
+    fontWeight: '600'
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontWeight: '600'
   },
   submitButtonText: {
     color: '#ffffff',
-    fontSize: 16,
     fontWeight: '600'
   }
 });
