@@ -1,9 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 import { useApp } from '../context/AppContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const VehicleInfo = () => {
   const { state } = useApp();
+  const styles = useThemedStyles(createStyles);
 
   return (
     <View style={styles.container}>
@@ -16,25 +18,33 @@ const VehicleInfo = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => ({
   container: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.surface,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 8,
     padding: 16,
-    borderColor: '#d1d5db',
+    borderColor: theme.border,
     borderWidth: 1,
+    shadowColor: theme.shadowColor,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: theme.shadowOpacity,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.text,
     marginBottom: 8,
   },
   item: {
     fontSize: 14,
-    color: '#374151',
+    color: theme.textSecondary,
     marginBottom: 4,
   },
 });

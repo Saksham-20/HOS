@@ -1,4 +1,3 @@
-// src/screens/LoginScreen.js - Updated to use API
 import React, { useState } from 'react';
 import { 
   View, 
@@ -12,12 +11,14 @@ import {
   ScrollView,
   ActivityIndicator
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
+import { ThemedSafeAreaView } from '../components/ThemedComponents';
 
 const LoginScreen = ({ navigation }) => {
   const { login, register, state } = useApp();
+  const { theme } = useTheme();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -99,28 +100,38 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ThemedSafeAreaView>
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView contentContainerStyle={styles.scrollView}>
           <View style={styles.header}>
-            <Icon name="local-shipping" size={60} color="#2563eb" />
-            <Text style={styles.title}>TruckLog Pro</Text>
-            <Text style={styles.subtitle}>Hours of Service Management</Text>
+            <Icon name="local-shipping" size={60} color={theme.primary} />
+            <Text style={[styles.title, { color: theme.text }]}>TruckLog Pro</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Hours of Service Management
+            </Text>
           </View>
 
-          <View style={styles.form}>
-            <Text style={styles.formTitle}>
+          <View style={[styles.form, { 
+            backgroundColor: theme.card,
+            shadowColor: theme.shadowColor,
+            shadowOpacity: theme.shadowOpacity,
+          }]}>
+            <Text style={[styles.formTitle, { color: theme.text }]}>
               {isRegistering ? 'Register New Driver' : 'Login'}
             </Text>
 
-            <View style={styles.inputContainer}>
-              <Icon name="person" size={24} color="#6b7280" style={styles.inputIcon} />
+            <View style={[styles.inputContainer, { 
+              backgroundColor: theme.inputBg,
+              borderColor: theme.inputBorder 
+            }]}>
+              <Icon name="person" size={24} color={theme.textSecondary} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: theme.inputText }]}
                 placeholder="Username"
+                placeholderTextColor={theme.placeholder}
                 value={formData.username}
                 onChangeText={(value) => handleInputChange('username', value)}
                 autoCapitalize="none"
@@ -128,11 +139,15 @@ const LoginScreen = ({ navigation }) => {
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Icon name="lock" size={24} color="#6b7280" style={styles.inputIcon} />
+            <View style={[styles.inputContainer, { 
+              backgroundColor: theme.inputBg,
+              borderColor: theme.inputBorder 
+            }]}>
+              <Icon name="lock" size={24} color={theme.textSecondary} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: theme.inputText }]}
                 placeholder="Password"
+                placeholderTextColor={theme.placeholder}
                 value={formData.password}
                 onChangeText={(value) => handleInputChange('password', value)}
                 secureTextEntry={!showPassword}
@@ -146,29 +161,37 @@ const LoginScreen = ({ navigation }) => {
                 <Icon 
                   name={showPassword ? 'visibility' : 'visibility-off'} 
                   size={24} 
-                  color="#6b7280" 
+                  color={theme.textSecondary} 
                 />
               </TouchableOpacity>
             </View>
 
             {isRegistering && (
               <>
-                <View style={styles.inputContainer}>
-                  <Icon name="badge" size={24} color="#6b7280" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { 
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder 
+                }]}>
+                  <Icon name="badge" size={24} color={theme.textSecondary} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.inputText }]}
                     placeholder="Full Name"
+                    placeholderTextColor={theme.placeholder}
                     value={formData.fullName}
                     onChangeText={(value) => handleInputChange('fullName', value)}
                     autoCapitalize="words"
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Icon name="email" size={24} color="#6b7280" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { 
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder 
+                }]}>
+                  <Icon name="email" size={24} color={theme.textSecondary} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.inputText }]}
                     placeholder="Email (Optional)"
+                    placeholderTextColor={theme.placeholder}
                     value={formData.email}
                     onChangeText={(value) => handleInputChange('email', value)}
                     keyboardType="email-address"
@@ -176,22 +199,30 @@ const LoginScreen = ({ navigation }) => {
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Icon name="credit-card" size={24} color="#6b7280" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { 
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder 
+                }]}>
+                  <Icon name="credit-card" size={24} color={theme.textSecondary} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.inputText }]}
                     placeholder="Driver License Number"
+                    placeholderTextColor={theme.placeholder}
                     value={formData.licenseNumber}
                     onChangeText={(value) => handleInputChange('licenseNumber', value)}
                     autoCapitalize="characters"
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Icon name="map" size={24} color="#6b7280" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { 
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder 
+                }]}>
+                  <Icon name="map" size={24} color={theme.textSecondary} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.inputText }]}
                     placeholder="License State (e.g., CA)"
+                    placeholderTextColor={theme.placeholder}
                     value={formData.licenseState}
                     onChangeText={(value) => handleInputChange('licenseState', value.toUpperCase())}
                     autoCapitalize="characters"
@@ -199,21 +230,29 @@ const LoginScreen = ({ navigation }) => {
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Icon name="business" size={24} color="#6b7280" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { 
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder 
+                }]}>
+                  <Icon name="business" size={24} color={theme.textSecondary} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.inputText }]}
                     placeholder="Carrier/Company Name"
+                    placeholderTextColor={theme.placeholder}
                     value={formData.carrierName}
                     onChangeText={(value) => handleInputChange('carrierName', value)}
                   />
                 </View>
 
-                <View style={styles.inputContainer}>
-                  <Icon name="local-shipping" size={24} color="#6b7280" style={styles.inputIcon} />
+                <View style={[styles.inputContainer, { 
+                  backgroundColor: theme.inputBg,
+                  borderColor: theme.inputBorder 
+                }]}>
+                  <Icon name="local-shipping" size={24} color={theme.textSecondary} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.inputText }]}
                     placeholder="Truck Unit Number"
+                    placeholderTextColor={theme.placeholder}
                     value={formData.truckNumber}
                     onChangeText={(value) => handleInputChange('truckNumber', value)}
                   />
@@ -222,7 +261,11 @@ const LoginScreen = ({ navigation }) => {
             )}
 
             <TouchableOpacity
-              style={[styles.submitButton, state.isLoading && styles.submitButtonDisabled]}
+              style={[
+                styles.submitButton, 
+                { backgroundColor: theme.primary },
+                state.isLoading && styles.submitButtonDisabled
+              ]}
               onPress={handleSubmit}
               disabled={state.isLoading}
             >
@@ -236,29 +279,25 @@ const LoginScreen = ({ navigation }) => {
             </TouchableOpacity>
 
             {state.error && (
-              <Text style={styles.errorText}>{state.error}</Text>
+              <Text style={[styles.errorText, { color: theme.danger }]}>{state.error}</Text>
             )}
 
             <TouchableOpacity
               style={styles.toggleButton}
               onPress={toggleMode}
             >
-              <Text style={styles.toggleButtonText}>
+              <Text style={[styles.toggleButtonText, { color: theme.primary }]}>
                 {isRegistering ? 'Already have an account? Login' : 'New driver? Register here'}
               </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-  },
   keyboardView: {
     flex: 1,
   },
@@ -274,55 +313,43 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#111827',
     marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
     marginTop: 8,
   },
   form: {
-    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 24,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   formTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 24,
     textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     borderRadius: 8,
     marginBottom: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  inputIcon: {
-    marginRight: 12,
   },
   input: {
     flex: 1,
     height: 50,
     fontSize: 16,
-    color: '#111827',
+    marginLeft: 12,
   },
   eyeIcon: {
     padding: 8,
   },
   submitButton: {
-    backgroundColor: '#2563eb',
     borderRadius: 8,
     height: 50,
     justifyContent: 'center',
@@ -330,7 +357,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: '#9ca3af',
+    opacity: 0.6,
   },
   submitButtonText: {
     color: '#ffffff',
@@ -338,7 +365,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   errorText: {
-    color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 12,
@@ -349,7 +375,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleButtonText: {
-    color: '#2563eb',
     fontSize: 14,
     fontWeight: '600',
   },

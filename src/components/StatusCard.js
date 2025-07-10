@@ -2,25 +2,27 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
 
 const StatusCard = () => {
   const { state } = useApp();
+  const { theme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000); // Update every second for real-time display
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'DRIVING': return '#10b981';
-      case 'ON_DUTY': return '#f59e0b';
-      case 'SLEEPER': return '#3b82f6';
-      case 'OFF_DUTY': return '#6b7280';
-      default: return '#6b7280';
+      case 'DRIVING': return theme.driving;
+      case 'ON_DUTY': return theme.onDuty;
+      case 'SLEEPER': return theme.sleeper;
+      case 'OFF_DUTY': return theme.offDuty;
+      default: return theme.offDuty;
     }
   };
 
@@ -48,9 +50,13 @@ const StatusCard = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Current Status</Text>
+    <View style={[styles.container, { 
+      backgroundColor: theme.card,
+      shadowColor: theme.shadowColor,
+      shadowOpacity: theme.shadowOpacity,
+    }]}>
+      <View style={[styles.header, { borderBottomColor: theme.borderLight }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Current Status</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(state.currentStatus) }]}>
           <Icon name={getStatusIcon(state.currentStatus)} size={16} color="#ffffff" />
           <Text style={styles.statusText}>{state.currentStatus.replace('_', ' ')}</Text>
@@ -60,9 +66,9 @@ const StatusCard = () => {
       <View style={styles.content}>
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
-            <Icon name="access-time" size={20} color="#6b7280" />
-            <Text style={styles.infoLabel}>Time</Text>
-            <Text style={styles.infoValue}>
+            <Icon name="access-time" size={20} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Time</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
               {currentTime.toLocaleTimeString('en-US', { 
                 hour: '2-digit', 
                 minute: '2-digit',
@@ -72,21 +78,23 @@ const StatusCard = () => {
           </View>
           
           <View style={styles.infoItem}>
-            <Icon name="timer" size={20} color="#6b7280" />
-            <Text style={styles.infoLabel}>Duration</Text>
-            <Text style={styles.infoValue}>{formatDuration()}</Text>
+            <Icon name="timer" size={20} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Duration</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{formatDuration()}</Text>
           </View>
           
           <View style={styles.infoItem}>
-            <Icon name="speed" size={20} color="#6b7280" />
-            <Text style={styles.infoLabel}>Odometer</Text>
-            <Text style={styles.infoValue}>{state.odometer || 0} mi</Text>
+            <Icon name="speed" size={20} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Odometer</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{state.odometer || 0} mi</Text>
           </View>
         </View>
         
-        <View style={styles.locationSection}>
-          <Icon name="location-on" size={20} color="#6b7280" />
-          <Text style={styles.locationText}>{state.location || 'No location set'}</Text>
+        <View style={[styles.locationSection, { backgroundColor: theme.background }]}>
+          <Icon name="location-on" size={20} color={theme.textSecondary} />
+          <Text style={[styles.locationText, { color: theme.text }]}>
+            {state.location || 'No location set'}
+          </Text>
         </View>
       </View>
     </View>
@@ -95,13 +103,10 @@ const StatusCard = () => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 12,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -111,12 +116,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#111827',
   },
   statusBadge: {
     flexDirection: 'row',
@@ -146,19 +149,16 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    color: '#6b7280',
     marginTop: 4,
   },
   infoValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
     marginTop: 2,
   },
   locationSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     padding: 12,
     borderRadius: 8,
     gap: 8,
@@ -166,7 +166,6 @@ const styles = StyleSheet.create({
   locationText: {
     flex: 1,
     fontSize: 14,
-    color: '#374151',
   },
 });
 

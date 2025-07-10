@@ -5,7 +5,6 @@ import {
   View, 
   Text, 
   TextInput, 
-  StyleSheet, 
   ScrollView, 
   TouchableOpacity, 
   ActivityIndicator,
@@ -15,10 +14,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
+import { useTheme } from '../context/ThemeContext';
 
 const LogsScreen = () => {
   const { state, updateLogEntry, submitLogEntry, refreshData } = useApp();
+  const { theme } = useTheme();
   const navigation = useNavigation();
+  const styles = useThemedStyles(createStyles);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editedEntry, setEditedEntry] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -127,11 +130,11 @@ const LogsScreen = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'DRIVING': return '#10b981';
-      case 'ON_DUTY': return '#f59e0b';
-      case 'SLEEPER': return '#3b82f6';
-      case 'OFF_DUTY': return '#6b7280';
-      default: return '#6b7280';
+      case 'DRIVING': return theme.driving;
+      case 'ON_DUTY': return theme.onDuty;
+      case 'SLEEPER': return theme.sleeper;
+      case 'OFF_DUTY': return theme.offDuty;
+      default: return theme.textTertiary;
     }
   };
 
@@ -164,7 +167,7 @@ const LogsScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#2563eb" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading logs...</Text>
         </View>
       </SafeAreaView>
@@ -199,13 +202,14 @@ const LogsScreen = () => {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#2563eb']}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
           />
         }
       >
         {state.logEntries.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Icon name="event-note" size={64} color="#d1d5db" />
+            <Icon name="event-note" size={64} color={theme.textTertiary} />
             <Text style={styles.emptyText}>No log entries for today</Text>
             <Text style={styles.emptySubtext}>
               Change your status to create a log entry
@@ -242,6 +246,7 @@ const LogsScreen = () => {
                         style={styles.input}
                         value={editedEntry.location}
                         placeholder="Enter location"
+                        placeholderTextColor={theme.placeholder}
                         onChangeText={(text) => setEditedEntry({ ...editedEntry, location: text })}
                       />
                     </View>
@@ -252,6 +257,7 @@ const LogsScreen = () => {
                         style={[styles.input, styles.notesInput]}
                         value={editedEntry.notes}
                         placeholder="Add notes (optional)"
+                        placeholderTextColor={theme.placeholder}
                         onChangeText={(text) => setEditedEntry({ ...editedEntry, notes: text })}
                         multiline
                         numberOfLines={3}
@@ -318,13 +324,13 @@ const LogsScreen = () => {
                     
                     <View style={styles.logDetails}>
                       <View style={styles.detailRow}>
-                        <Icon name="location-on" size={16} color="#6b7280" />
+                        <Icon name="location-on" size={16} color={theme.textTertiary} />
                         <Text style={styles.location}>{entry.location || 'No location'}</Text>
                       </View>
                       
                       {entry.odometer_start && (
                         <View style={styles.detailRow}>
-                          <Icon name="speed" size={16} color="#6b7280" />
+                          <Icon name="speed" size={16} color={theme.textTertiary} />
                           <Text style={styles.odometer}>
                             {entry.odometer_start} mi
                             {entry.odometer_end && ` - ${entry.odometer_end} mi`}
@@ -334,7 +340,7 @@ const LogsScreen = () => {
                       
                       {entry.notes && (
                         <View style={styles.detailRow}>
-                          <Icon name="note" size={16} color="#6b7280" />
+                          <Icon name="note" size={16} color={theme.textTertiary} />
                           <Text style={styles.notes}>{entry.notes}</Text>
                         </View>
                       )}
@@ -345,7 +351,7 @@ const LogsScreen = () => {
                       
                       {entry.isSubmitted || entry.is_submitted ? (
                         <View style={styles.submittedBadge}>
-                          <Icon name="check-circle" size={16} color="#10b981" />
+                          <Icon name="check-circle" size={16} color={theme.success} />
                           <Text style={styles.submittedText}>Submitted</Text>
                         </View>
                       ) : (
@@ -353,7 +359,7 @@ const LogsScreen = () => {
                           style={styles.editButton}
                           onPress={() => handleEdit(index, entry)}
                         >
-                          <Icon name="edit" size={16} color="#2563eb" />
+                          <Icon name="edit" size={16} color={theme.primary} />
                           <Text style={styles.editButtonText}>Edit</Text>
                         </TouchableOpacity>
                       )}
@@ -369,10 +375,10 @@ const LogsScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => ({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6'
+    backgroundColor: theme.background
   },
   centerContainer: {
     flex: 1,
@@ -382,31 +388,36 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6b7280'
+    color: theme.textSecondary
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: theme.border,
+    shadowColor: theme.shadowColor,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme.shadowOpacity,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#111827'
+    color: theme.text
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.textSecondary,
     marginTop: 2
   },
   inspectButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2563eb',
+    backgroundColor: theme.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -429,28 +440,28 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#374151',
+    color: theme.text,
     marginTop: 16
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.textSecondary,
     marginTop: 8
   },
   logItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.surface,
     marginBottom: 12,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowColor: theme.shadowColor,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme.shadowOpacity,
+    shadowRadius: 3.84,
+    elevation: 3,
     overflow: 'hidden'
   },
   currentLogItem: {
     borderWidth: 2,
-    borderColor: '#3b82f6'
+    borderColor: theme.primary
   },
   logContent: {
     padding: 16
@@ -475,11 +486,11 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.text,
     textTransform: 'capitalize'
   },
   currentBadge: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: theme.isDarkMode ? 'rgba(59, 130, 246, 0.2)' : '#dbeafe',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4
@@ -487,7 +498,7 @@ const styles = StyleSheet.create({
   currentBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#2563eb'
+    color: theme.primary
   },
   timeInfo: {
     alignItems: 'flex-end'
@@ -495,11 +506,11 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827'
+    color: theme.text
   },
   duration: {
     fontSize: 12,
-    color: '#6b7280',
+    color: theme.textSecondary,
     marginTop: 2
   },
   logDetails: {
@@ -512,16 +523,16 @@ const styles = StyleSheet.create({
   },
   location: {
     fontSize: 14,
-    color: '#374151',
+    color: theme.textSecondary,
     flex: 1
   },
   odometer: {
     fontSize: 14,
-    color: '#374151'
+    color: theme.textSecondary
   },
   notes: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.textTertiary,
     fontStyle: 'italic',
     flex: 1
   },
@@ -532,11 +543,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6'
+    borderTopColor: theme.border
   },
   date: {
     fontSize: 12,
-    color: '#9ca3af'
+    color: theme.textTertiary
   },
   submittedBadge: {
     flexDirection: 'row',
@@ -545,7 +556,7 @@ const styles = StyleSheet.create({
   },
   submittedText: {
     fontSize: 12,
-    color: '#10b981',
+    color: theme.success,
     fontWeight: '600'
   },
   editButton: {
@@ -555,11 +566,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: '#eff6ff'
+    backgroundColor: theme.isDarkMode ? 'rgba(59, 130, 246, 0.2)' : '#eff6ff'
   },
   editButtonText: {
     fontSize: 12,
-    color: '#2563eb',
+    color: theme.primary,
     fontWeight: '600'
   },
   editMode: {
@@ -574,7 +585,7 @@ const styles = StyleSheet.create({
   editTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827'
+    color: theme.text
   },
   inputContainer: {
     marginBottom: 16
@@ -582,16 +593,17 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: theme.text,
     marginBottom: 6
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: theme.inputBorder,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#f9fafb'
+    backgroundColor: theme.inputBg,
+    color: theme.inputText
   },
   notesInput: {
     minHeight: 80,
@@ -610,16 +622,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6'
+    backgroundColor: theme.isDarkMode ? theme.border : '#f3f4f6'
   },
   saveButton: {
-    backgroundColor: '#10b981'
+    backgroundColor: theme.success
   },
   submitButton: {
-    backgroundColor: '#ef4444'
+    backgroundColor: theme.danger
   },
   cancelButtonText: {
-    color: '#374151',
+    color: theme.text,
     fontWeight: '600'
   },
   saveButtonText: {

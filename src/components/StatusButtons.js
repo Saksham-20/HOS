@@ -1,16 +1,16 @@
-// src/components/StatusButtons.js
+// src/components/StatusButtons.js - Updated with dark mode support
 import React, { useState } from 'react';
 import {
   View,
   TouchableOpacity,
   Text,
-  StyleSheet,
   Modal,
   TextInput,
   Alert
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 import { Svg, Circle } from 'react-native-svg';
 
 const StatusButtons = () => {
@@ -20,6 +20,7 @@ const StatusButtons = () => {
   const [location, setLocation] = useState('');
   const [odometer, setOdometer] = useState('');
   const [notes, setNotes] = useState('');
+  const styles = useThemedStyles(createStyles);
 
   const statusConfig = {
     OFF_DUTY: {
@@ -110,11 +111,10 @@ const StatusButtons = () => {
     const radius = 40;
     const strokeWidth = 10;
     const circumference = Math.PI * radius;
-    const progress = circumference * (1 - Math.min(percentage, 1)); // Ensure percentage doesn't exceed 1
+    const progress = circumference * (1 - Math.min(percentage, 1));
 
     return (
       <Svg width={100} height={60}>
-        {/* Background arc */}
         <Circle
           cx="50"
           cy="50"
@@ -127,7 +127,6 @@ const StatusButtons = () => {
           strokeLinecap="round"
           transform="rotate(180 50 50)"
         />
-        {/* Foreground arc */}
         <Circle
           cx="50"
           cy="50"
@@ -210,6 +209,7 @@ const StatusButtons = () => {
                 value={location}
                 onChangeText={setLocation}
                 placeholder="Enter current location"
+                placeholderTextColor="#9ca3af"
               />
             </View>
 
@@ -220,6 +220,7 @@ const StatusButtons = () => {
                 value={odometer}
                 onChangeText={setOdometer}
                 placeholder="Enter odometer reading"
+                placeholderTextColor="#9ca3af"
                 keyboardType="numeric"
               />
             </View>
@@ -231,6 +232,7 @@ const StatusButtons = () => {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Add any notes..."
+                placeholderTextColor="#9ca3af"
                 multiline
                 numberOfLines={3}
               />
@@ -257,22 +259,27 @@ const StatusButtons = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => ({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.background,
   },
   hoursDisplay: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
+    shadowColor: theme.shadowColor,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme.shadowOpacity,
+    shadowRadius: 4,
+    elevation: 3,
   },
   hoursTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: theme.text,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -286,13 +293,13 @@ const styles = StyleSheet.create({
   },
   circleLabel: {
     fontSize: 14,
-    color: '#374151',
+    color: theme.textSecondary,
     marginTop: 4,
   },
   circleValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#111827',
+    color: theme.text,
   },
   hoursWarning: {
     color: '#dc2626',
@@ -312,9 +319,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     width: '48%',
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: theme.shadowColor,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
+    shadowOpacity: theme.shadowOpacity,
     shadowRadius: 2,
   },
   activeButton: {
@@ -323,7 +330,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: theme.card,
   },
   buttonText: {
     color: '#ffffff',
@@ -338,13 +345,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 20,
     width: '90%',
     maxWidth: 400,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: theme.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -358,7 +365,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111827',
+    color: theme.text,
     flex: 1,
   },
   inputContainer: {
@@ -367,16 +374,17 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: theme.text,
     marginBottom: 4,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: theme.borderLight,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.inputBackground,
+    color: theme.text,
   },
   textArea: {
     height: 80,
@@ -395,15 +403,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: theme.buttonSecondary,
     marginRight: 8,
   },
   confirmButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.primary,
     marginLeft: 8,
   },
   cancelButtonText: {
-    color: '#374151',
+    color: theme.textSecondary,
     fontWeight: '500',
   },
   confirmButtonText: {

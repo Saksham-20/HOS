@@ -1,7 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const LogEntry = ({ entry }) => {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.entry}>
       <View style={styles.row}>
@@ -14,10 +17,10 @@ const LogEntry = ({ entry }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => ({
   entry: {
     padding: 12,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: theme.borderLight,
     borderBottomWidth: 1,
   },
   row: {
@@ -28,19 +31,19 @@ const styles = StyleSheet.create({
   time: {
     fontWeight: '600',
     fontSize: 16,
-    color: '#111827',
+    color: theme.text,
   },
   status: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.textSecondary,
   },
   details: {
     fontSize: 13,
-    color: '#4b5563',
+    color: theme.textSecondary,
   },
   notes: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: theme.textTertiary,
     fontStyle: 'italic',
   },
 });

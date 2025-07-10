@@ -1,5 +1,4 @@
-// src/screens/ProfileScreen.js - Updated with backend integration
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -7,15 +6,18 @@ import {
   TouchableOpacity, 
   Alert,
   ScrollView,
-  RefreshControl 
+  RefreshControl,
+  Switch
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
+import { ThemedSafeAreaView, ThemedText, ThemedCard } from '../components/ThemedComponents';
 
 const ProfileScreen = () => {
   const { state, logout, refreshData } = useApp();
+  const { theme, isDarkMode, themeMode, setTheme } = useTheme();
   const navigation = useNavigation();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -52,38 +54,72 @@ const ProfileScreen = () => {
   };
 
   const ProfileItem = ({ icon, label, value }) => (
-    <View style={styles.profileItem}>
+    <View style={[styles.profileItem, { borderBottomColor: theme.border }]}>
       <View style={styles.itemHeader}>
-        <Icon name={icon} size={20} color="#6b7280" />
-        <Text style={styles.label}>{label}</Text>
+        <Icon name={icon} size={20} color={theme.textSecondary} />
+        <ThemedText secondary style={styles.label}>{label}</ThemedText>
       </View>
-      <Text style={styles.value}>{value || 'Not set'}</Text>
+      <ThemedText style={styles.value}>{value || 'Not set'}</ThemedText>
     </View>
   );
 
+  const ThemeOption = ({ title, value, isSelected }) => (
+    <TouchableOpacity
+      style={[
+        styles.themeOption,
+        { 
+          borderColor: isSelected ? theme.primary : theme.border,
+          backgroundColor: isSelected ? theme.primary + '20' : 'transparent'
+        }
+      ]}
+      onPress={() => setTheme(value)}
+    >
+      <Icon 
+        name={value === 'light' ? 'wb-sunny' : value === 'dark' ? 'nights-stay' : 'settings-brightness'} 
+        size={24} 
+        color={isSelected ? theme.primary : theme.textSecondary} 
+      />
+      <ThemedText style={[styles.themeOptionText, isSelected && { color: theme.primary }]}>
+        {title}
+      </ThemedText>
+    </TouchableOpacity>
+  );
+
   return (
-    <SafeAreaView style={styles.container}>
+    <ThemedSafeAreaView>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={['#2563eb']}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
           />
         }
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
           <View style={styles.avatarContainer}>
-            <Icon name="account-circle" size={80} color="#2563eb" />
+            <Icon name="account-circle" size={80} color={theme.primary} />
           </View>
-          <Text style={styles.name}>{state.driverInfo.name || 'Driver'}</Text>
-          <Text style={styles.username}>@{state.driverInfo.username}</Text>
+          <ThemedText style={styles.name}>{state.driverInfo.name || 'Driver'}</ThemedText>
+          <ThemedText secondary style={styles.username}>@{state.driverInfo.username}</ThemedText>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Driver Information</Text>
-          <View style={styles.card}>
+          <ThemedText style={styles.sectionTitle}>Theme Settings</ThemedText>
+          <ThemedCard style={styles.card}>
+            <View style={styles.themeSelector}>
+              <ThemeOption title="Light" value="light" isSelected={themeMode === 'light'} />
+              <ThemeOption title="Dark" value="dark" isSelected={themeMode === 'dark'} />
+              <ThemeOption title="System" value="system" isSelected={themeMode === 'system'} />
+            </View>
+          </ThemedCard>
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Driver Information</ThemedText>
+          <ThemedCard style={styles.card}>
             <ProfileItem 
               icon="badge" 
               label="Driver ID" 
@@ -99,12 +135,12 @@ const ProfileScreen = () => {
               label="License State" 
               value={state.driverInfo.license_state} 
             />
-          </View>
+          </ThemedCard>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Company Information</Text>
-          <View style={styles.card}>
+          <ThemedText style={styles.sectionTitle}>Company Information</ThemedText>
+          <ThemedCard style={styles.card}>
             <ProfileItem 
               icon="business" 
               label="Carrier" 
@@ -120,32 +156,29 @@ const ProfileScreen = () => {
               label="DOT Number" 
               value={state.driverInfo.dot_number} 
             />
-          </View>
+          </ThemedCard>
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity 
+          style={[styles.logoutButton, { backgroundColor: theme.danger }]} 
+          onPress={handleLogout}
+        >
           <Icon name="logout" size={20} color="#ffffff" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-  },
   scrollContent: {
     paddingBottom: 20,
   },
   header: {
     alignItems: 'center',
     paddingVertical: 24,
-    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
   avatarContainer: {
     marginBottom: 12,
@@ -153,12 +186,10 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
     marginBottom: 4,
   },
   username: {
     fontSize: 16,
-    color: '#6b7280',
   },
   section: {
     marginTop: 20,
@@ -167,21 +198,36 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
     marginBottom: 12,
   },
   card: {
-    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
   },
+  themeSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+  },
+  themeOptionText: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   profileItem: {
+    paddingBottom: 16,
     marginBottom: 16,
+    borderBottomWidth: 1,
   },
   itemHeader: {
     flexDirection: 'row',
@@ -191,12 +237,10 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#6b7280',
   },
   value: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
     marginLeft: 28,
   },
   logoutButton: {
@@ -207,7 +251,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
     marginHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#ef4444',
     borderRadius: 8,
   },
   logoutText: {

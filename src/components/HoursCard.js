@@ -1,13 +1,15 @@
-// src/components/HoursCard.js - Updated with real data
+// src/components/HoursCard.js - Updated with dark mode support
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { useApp } from '../context/AppContext';
+import { useThemedStyles } from '../hooks/useThemedStyles';
 
 const HoursCard = () => {
   const { state, fetchWeeklySummary, fetchCycleInfo } = useApp();
   const [selectedView, setSelectedView] = useState('weekly');
   const [animatedValue] = useState(new Animated.Value(0));
   const [currentTime, setCurrentTime] = useState(new Date());
+  const styles = useThemedStyles(createStyles);
 
   // Update current time every minute
   useEffect(() => {
@@ -249,22 +251,22 @@ const HoursCard = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => ({
   container: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.card,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: theme.shadowColor,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: theme.shadowOpacity,
     shadowRadius: 4,
     elevation: 3,
     overflow: 'hidden',
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.tabBackground,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
   },
@@ -276,16 +278,16 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    backgroundColor: '#ffffff',
-    borderBottomColor: '#3b82f6',
+    backgroundColor: theme.card,
+    borderBottomColor: theme.primary,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6b7280',
+    color: theme.textSecondary,
   },
   activeTabText: {
-    color: '#3b82f6',
+    color: theme.primary,
     fontWeight: '600',
   },
   content: {
@@ -297,7 +299,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.text,
     marginBottom: 16,
   },
   dataRow: {
@@ -308,29 +310,29 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.textSecondary,
     fontWeight: '500',
   },
   value: {
     fontSize: 14,
-    color: '#111827',
+    color: theme.text,
     fontWeight: '600',
   },
   resetText: {
     fontSize: 14,
-    color: '#10b981',
+    color: theme.success,
     fontWeight: '600',
   },
   progressBar: {
     height: 6,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: theme.progressBackground,
     borderRadius: 3,
     marginTop: 12,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.primary,
     borderRadius: 3,
   },
   cycleIndicator: {
@@ -345,10 +347,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   activeDot: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.primary,
   },
   inactiveDot: {
-    backgroundColor: '#e5e7eb',
+    backgroundColor: theme.inactiveColor,
   },
   riskIndicator: {
     marginTop: 12,
