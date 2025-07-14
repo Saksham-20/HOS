@@ -15,6 +15,8 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { ThemedSafeAreaView } from '../components/ThemedComponents';
+import AdminApiService from '../services/adminApi';
+
 
 const LoginScreen = ({ navigation }) => {
   const { login, register, state } = useApp();
@@ -31,6 +33,7 @@ const LoginScreen = ({ navigation }) => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(false);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -40,6 +43,14 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const validateForm = () => {
+    if (isAdminMode) {
+      if (!formData.username || !formData.password) {
+        Alert.alert('Error', 'Please enter admin credentials');
+        return false;
+      }
+      return true;
+    }
+
     const required = isRegistering 
       ? ['username', 'password', 'fullName', 'licenseNumber', 'licenseState', 'carrierName', 'truckNumber']
       : ['username', 'password'];
@@ -59,8 +70,29 @@ const LoginScreen = ({ navigation }) => {
     return true;
   };
 
+  const handleAdminLogin = async () => {
+    if (!validateForm()) return;
+
+    try {
+      const response = await AdminApiService.loginAdmin(formData.username, formData.password);
+      if (response.success) {
+        navigation.navigate('AdminDashboard');
+      } else {
+        Alert.alert('Admin Login Failed', response.message || 'Invalid admin credentials');
+      }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      Alert.alert('Admin Login Failed', 'Unable to connect to admin system');
+    }
+  };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
+
+    if (isAdminMode) {
+      await handleAdminLogin();
+      return;
+    }
 
     if (isRegistering) {
       const result = await register(formData);
@@ -87,6 +119,37 @@ const LoginScreen = ({ navigation }) => {
 
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
+    setIsAdminMode(false);
+    setFormData({
+      username: '',
+      password: '',
+      fullName: '',
+      licenseNumber: '',
+      licenseState: '',
+      carrierName: '',
+      truckNumber: '',
+      email: ''
+    });
+  };
+
+  const toggleAdminMode = () => {
+    setIsAdminMode(!isAdminMode);
+    setIsRegistering(false);
+    setFormData({
+      username: '',
+      password: '',
+      fullName: '',
+      licenseNumber: '',
+      licenseState: '',
+      carrierName: '',
+      truckNumber: '',
+      email: ''
+    });
+  };
+
+  const resetToDriverMode = () => {
+    setIsAdminMode(false);
+    setIsRegistering(false);
     setFormData({
       username: '',
       password: '',
@@ -107,20 +170,39 @@ const LoginScreen = ({ navigation }) => {
       >
         <ScrollView contentContainerStyle={styles.scrollView}>
           <View style={styles.header}>
-            <Icon name="local-shipping" size={60} color={theme.primary} />
-            <Text style={[styles.title, { color: theme.text }]}>TruckLog Pro</Text>
+            <Icon 
+              name={isAdminMode ? "admin-panel-settings" : "local-shipping"} 
+              size={60} 
+              color={isAdminMode ? theme.warning : theme.primary} 
+            />
+            <Text style={[styles.title, { color: theme.text }]}>
+              {isAdminMode ? 'Admin Portal' : 'TruckLog Pro'}
+            </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              Hours of Service Management
+              {isAdminMode ? 'Fleet Management System' : 'Hours of Service Management'}
             </Text>
           </View>
+
+          {/* Admin Mode Toggle Button */}
+          {!isAdminMode && (
+            <TouchableOpacity
+              style={[styles.adminToggle, { backgroundColor: theme.warning }]}
+              onPress={toggleAdminMode}
+            >
+              <Icon name="admin-panel-settings" size={20} color="#ffffff" />
+              <Text style={styles.adminToggleText}>Admin Login</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={[styles.form, { 
             backgroundColor: theme.card,
             shadowColor: theme.shadowColor,
             shadowOpacity: theme.shadowOpacity,
+            borderColor: isAdminMode ? theme.warning : 'transparent',
+            borderWidth: isAdminMode ? 2 : 0,
           }]}>
             <Text style={[styles.formTitle, { color: theme.text }]}>
-              {isRegistering ? 'Register New Driver' : 'Login'}
+              {isAdminMode ? 'Admin Login' : isRegistering ? 'Register New Driver' : 'Driver Login'}
             </Text>
 
             <View style={[styles.inputContainer, { 
@@ -130,7 +212,7 @@ const LoginScreen = ({ navigation }) => {
               <Icon name="person" size={24} color={theme.textSecondary} />
               <TextInput
                 style={[styles.input, { color: theme.inputText }]}
-                placeholder="Username"
+                placeholder={isAdminMode ? "Admin Username" : "Username"}
                 placeholderTextColor={theme.placeholder}
                 value={formData.username}
                 onChangeText={(value) => handleInputChange('username', value)}
@@ -146,7 +228,7 @@ const LoginScreen = ({ navigation }) => {
               <Icon name="lock" size={24} color={theme.textSecondary} />
               <TextInput
                 style={[styles.input, { color: theme.inputText }]}
-                placeholder="Password"
+                placeholder={isAdminMode ? "Admin Password" : "Password"}
                 placeholderTextColor={theme.placeholder}
                 value={formData.password}
                 onChangeText={(value) => handleInputChange('password', value)}
@@ -166,7 +248,8 @@ const LoginScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {isRegistering && (
+            {/* Driver Registration Fields - Only show if not admin mode and registering */}
+            {!isAdminMode && isRegistering && (
               <>
                 <View style={[styles.inputContainer, { 
                   backgroundColor: theme.inputBg,
@@ -263,7 +346,7 @@ const LoginScreen = ({ navigation }) => {
             <TouchableOpacity
               style={[
                 styles.submitButton, 
-                { backgroundColor: theme.primary },
+                { backgroundColor: isAdminMode ? theme.warning : theme.primary },
                 state.isLoading && styles.submitButtonDisabled
               ]}
               onPress={handleSubmit}
@@ -273,7 +356,7 @@ const LoginScreen = ({ navigation }) => {
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text style={styles.submitButtonText}>
-                  {isRegistering ? 'Register' : 'Login'}
+                  {isAdminMode ? 'Login as Admin' : isRegistering ? 'Register' : 'Login'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -282,14 +365,26 @@ const LoginScreen = ({ navigation }) => {
               <Text style={[styles.errorText, { color: theme.danger }]}>{state.error}</Text>
             )}
 
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={toggleMode}
-            >
-              <Text style={[styles.toggleButtonText, { color: theme.primary }]}>
-                {isRegistering ? 'Already have an account? Login' : 'New driver? Register here'}
-              </Text>
-            </TouchableOpacity>
+            {/* Mode Toggle Buttons */}
+            {isAdminMode ? (
+              <TouchableOpacity
+                style={styles.toggleButton}
+                onPress={resetToDriverMode}
+              >
+                <Text style={[styles.toggleButtonText, { color: theme.primary }]}>
+                  Back to Driver Login
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.toggleButton}
+                onPress={toggleMode}
+              >
+                <Text style={[styles.toggleButtonText, { color: theme.primary }]}>
+                  {isRegistering ? 'Already have an account? Login' : 'New driver? Register here'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -318,6 +413,22 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     marginTop: 8,
+  },
+  adminToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    marginBottom: 20,
+    alignSelf: 'center',
+    gap: 8,
+  },
+  adminToggleText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   form: {
     borderRadius: 12,

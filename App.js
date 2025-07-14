@@ -1,4 +1,4 @@
-// App.js - Fixed navigation theme issue
+// App.js - Updated with Admin Dashboard
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -14,6 +14,7 @@ import InspectionScreen from './src/screens/InspectionScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RoadsideInspectionScreen from './src/screens/RoadsideInspectionScreen';
+import AdminDashboardScreen from './src/screens/AdminDashboardScreen';
 import { AppProvider, useApp } from './src/context/AppContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
@@ -138,7 +139,17 @@ const AppNavigator = () => {
             />
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen 
+              name="AdminDashboard" 
+              component={AdminDashboardScreen}
+              options={{
+                headerShown: false,
+                gestureEnabled: false, // Prevent swipe back
+              }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
