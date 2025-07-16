@@ -1,3 +1,4 @@
+// src/services/api.js - Fixed with correct endpoint structure
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_BASE_URL = 'http://192.168.1.30:3000/api'; // Change to your server URL
@@ -44,14 +45,23 @@ class ApiService {
       },
     };
 
-    const response = await fetch(`${this.baseURL}${endpoint}`, config);
-    const data = await response.json();
+    try {
+      console.log(`🌐 API Request: ${options.method || 'GET'} ${this.baseURL}${endpoint}`);
+      
+      const response = await fetch(`${this.baseURL}${endpoint}`, config);
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.message || 'API request failed');
+      if (!response.ok) {
+        console.error(`❌ API Error: ${response.status} - ${data.message || 'Unknown error'}`);
+        throw new Error(data.message || 'API request failed');
+      }
+
+      console.log(`✅ API Success: ${endpoint}`);
+      return data;
+    } catch (error) {
+      console.error(`❌ API Request failed for ${endpoint}:`, error);
+      throw error;
     }
-
-    return data;
   }
 
   // Auth endpoints
@@ -84,13 +94,31 @@ class ApiService {
     }
   }
 
-  // Log endpoints
+  // Location endpoints - FIXED PATHS
+  async updateLocation(locationData) {
+    console.log('📍 Updating location:', locationData);
+    return this.request('/drivers/location', {
+      method: 'POST',
+      body: JSON.stringify(locationData),
+    });
+  }
+
+  async getCurrentLocation() {
+    return this.request('/drivers/location');
+  }
+
+  async getLocationHistory(hours = 24) {
+    return this.request(`/drivers/location/history?hours=${hours}`);
+  }
+
+  // Log endpoints with location support
   async getLogs(params = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/logs?${queryString}`);
   }
 
   async changeStatus(statusData) {
+    console.log('📊 Changing status:', statusData);
     return this.request('/logs/status', {
       method: 'POST',
       body: JSON.stringify(statusData),
@@ -159,6 +187,17 @@ class ApiService {
       method: 'PUT',
       body: JSON.stringify({ notes }),
     });
+  }
+
+  // Test connection
+  async testConnection() {
+    try {
+      const response = await this.request('/health');
+      return response;
+    } catch (error) {
+      console.error('❌ Connection test failed:', error);
+      return { success: false, error: error.message };
+    }
   }
 }
 

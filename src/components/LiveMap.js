@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/LiveMap.js - Updated to use real location data
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,30 +11,45 @@ import {
   TouchableOpacity,
   PermissionsAndroid
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../context/ThemeContext';
+import AdminApiService from '../services/adminApi';
 
 const { width, height } = Dimensions.get('window');
 
-const LiveMap = ({ drivers = [], onDriverSelect, refreshInterval = 30000 }) => {
+const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
   const { theme } = useTheme();
-  const [mapRegion] = useState({
-    latitude: 37.78825,
-    longitude: -122.4324,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
-  const [loading, setLoading] = useState(false);
+  const mapRef = useRef(null);
+  const [drivers, setDrivers] = useState([]);
+  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [driverRoute, setDriverRoute] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [mapError, setMapError] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 39.8283, // Center of USA
+    longitude: -98.5795,
+    latitudeDelta: 15,
+    longitudeDelta: 15,
+  });
 
   useEffect(() => {
     // Request permissions on mount
     if (Platform.OS === 'android') {
       requestLocationPermission();
     }
-    setLoading(false);
-  }, []);
+    
+    // Initial load
+    loadDriverLocations();
+
+    // Set up real-time updates
+    const interval = setInterval(() => {
+      loadDriverLocations();
+    }, refreshInterval);
+
+    return () => clearInterval(interval);
+  }, [refreshInterval]);
 
   const requestLocationPermission = async () => {
     try {
@@ -41,15 +57,102 @@ const LiveMap = ({ drivers = [], onDriverSelect, refreshInterval = 30000 }) => {
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
           title: 'Location Permission',
-          message: 'TruckLog Pro needs location access',
+          message: 'TruckLog Pro Admin needs location access to display driver positions',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Cancel',
           buttonPositive: 'OK',
         }
       );
-      console.log('Permission result:', granted);
+      console.log('Admin map permission result:', granted);
     } catch (err) {
       console.warn('Permission error:', err);
+    }
+  };
+
+  const loadDriverLocations = async () => {
+    try {
+      const response = await AdminApiService.getLiveDriverLocations();
+      
+      if (response.success && response.drivers) {
+        // Filter drivers with valid location data
+        const driversWithLocation = response.drivers.filter(driver => 
+          driver.latitude && 
+          driver.longitude && 
+          !isNaN(parseFloat(driver.latitude)) && 
+          !isNaN(parseFloat(driver.longitude))
+        );
+
+        setDrivers(driversWithLocation);
+        setLastUpdate(new Date());
+
+        // Auto-fit map to show all drivers if we have data
+        if (driversWithLocation.length > 0 && mapRef.current) {
+          const coordinates = driversWithLocation.map(driver => ({
+            latitude: parseFloat(driver.latitude),
+            longitude: parseFloat(driver.longitude),
+          }));
+
+          // Add some padding around the drivers
+          mapRef.current.fitToCoordinates(coordinates, {
+            edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+            animated: true,
+          });
+        }
+      } else {
+        console.warn('No live driver location data available');
+        setDrivers([]);
+      }
+    } catch (error) {
+      console.error('Error loading driver locations:', error);
+      setMapError('Failed to load driver locations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDriverRoute = async (driverId) => {
+    try {
+      const endTime = new Date();
+      const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000); // Last 24 hours
+      
+      const response = await AdminApiService.getDriverLocationHistory(driverId, 24);
+      
+      if (response.success && response.locations) {
+        const routeCoordinates = response.locations
+          .filter(loc => loc.latitude && loc.longitude)
+          .map(loc => ({
+            latitude: parseFloat(loc.latitude),
+            longitude: parseFloat(loc.longitude),
+            timestamp: loc.timestamp
+          }))
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        setDriverRoute(routeCoordinates);
+      }
+    } catch (error) {
+      console.error('Error loading driver route:', error);
+    }
+  };
+
+  const handleDriverPress = async (driver) => {
+    setSelectedDriver(driver);
+    
+    // Load driver's route
+    await loadDriverRoute(driver.id);
+    
+    // Focus map on selected driver
+    if (mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: parseFloat(driver.latitude),
+        longitude: parseFloat(driver.longitude),
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }, 1000);
+    }
+
+    // Call parent callback if provided
+    if (onDriverSelect) {
+      onDriverSelect(driver);
     }
   };
 
@@ -63,42 +166,37 @@ const LiveMap = ({ drivers = [], onDriverSelect, refreshInterval = 30000 }) => {
     }
   };
 
-  // Create test data with proper coordinates
-  const testDrivers = [
-    {
-      id: 1,
-      name: 'John Doe',
-      truck_number: 'T001',
-      current_status: 'DRIVING',
-      latitude: 37.78825,
-      longitude: -122.4324,
-    },
-    {
-      id: 2,
-      name: 'Jane Smith',
-      truck_number: 'T002',
-      current_status: 'ON_DUTY',
-      latitude: 37.7749,
-      longitude: -122.4194,
-    },
-    {
-      id: 3,
-      name: 'Bob Johnson',
-      truck_number: 'T003',
-      current_status: 'OFF_DUTY',
-      latitude: 37.7849,
-      longitude: -122.4094,
+  const getMarkerIcon = (status) => {
+    switch (status) {
+      case 'DRIVING': return 'local-shipping';
+      case 'ON_DUTY': return 'work';
+      case 'SLEEPER': return 'hotel';
+      case 'OFF_DUTY': return 'home';
+      default: return 'help';
     }
-  ];
+  };
 
-  const displayDrivers = drivers.length > 0 ? drivers : testDrivers;
+  const formatLastUpdate = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-          Loading map...
+          Loading real-time driver locations...
         </Text>
       </View>
     );
@@ -109,9 +207,6 @@ const LiveMap = ({ drivers = [], onDriverSelect, refreshInterval = 30000 }) => {
       <View style={styles.errorContainer}>
         <Icon name="error-outline" size={48} color={theme.danger} />
         <Text style={[styles.errorText, { color: theme.text }]}>
-          Failed to load map
-        </Text>
-        <Text style={[styles.errorDetail, { color: theme.textSecondary }]}>
           {mapError}
         </Text>
         <TouchableOpacity 
@@ -119,7 +214,7 @@ const LiveMap = ({ drivers = [], onDriverSelect, refreshInterval = 30000 }) => {
           onPress={() => {
             setMapError(null);
             setLoading(true);
-            setTimeout(() => setLoading(false), 1000);
+            loadDriverLocations();
           }}
         >
           <Text style={styles.retryText}>Retry</Text>
@@ -131,65 +226,156 @@ const LiveMap = ({ drivers = [], onDriverSelect, refreshInterval = 30000 }) => {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
-        onMapReady={() => console.log('Map is ready')}
+        onMapReady={() => console.log('Live map is ready')}
         onError={(e) => {
           console.error('Map error:', e.nativeEvent);
-          setMapError(e.nativeEvent.error || 'Unknown map error');
+          setMapError(e.nativeEvent.error || 'Map loading failed');
         }}
       >
-        {displayDrivers.map((driver) => (
-          <Marker
-            key={driver.id}
-            coordinate={{
-              latitude: parseFloat(driver.latitude),
-              longitude: parseFloat(driver.longitude),
-            }}
-            title={driver.name || driver.full_name}
-            description={`Truck: ${driver.truck_number} | Status: ${driver.current_status}`}
-            onPress={() => onDriverSelect && onDriverSelect(driver)}
-          >
-            <View style={styles.markerContainer}>
-              <View style={[
-                styles.marker,
-                { backgroundColor: getMarkerColor(driver.current_status) }
-              ]}>
-                <Icon name="local-shipping" size={20} color="#ffffff" />
+        {/* Driver markers with real location data */}
+        {drivers.map((driver) => {
+          const lat = parseFloat(driver.latitude);
+          const lng = parseFloat(driver.longitude);
+          
+          if (isNaN(lat) || isNaN(lng)) return null;
+
+          const isOnline = driver.is_online || 
+            (driver.last_location_update && 
+             (new Date() - new Date(driver.last_location_update)) < 5 * 60 * 1000);
+
+          return (
+            <Marker
+              key={`driver-${driver.id}`}
+              coordinate={{ latitude: lat, longitude: lng }}
+              title={driver.name || driver.full_name}
+              description={`${driver.truck_number} | ${driver.current_status} | ${formatLastUpdate(driver.last_location_update)}`}
+              onPress={() => handleDriverPress(driver)}
+            >
+              <View style={styles.markerContainer}>
+                <View style={[
+                  styles.marker,
+                  { 
+                    backgroundColor: getMarkerColor(driver.current_status),
+                    borderColor: isOnline ? '#ffffff' : '#dc2626',
+                    borderWidth: 3
+                  }
+                ]}>
+                  <Icon 
+                    name={getMarkerIcon(driver.current_status)} 
+                    size={20} 
+                    color="#ffffff" 
+                  />
+                  {/* Online indicator */}
+                  <View style={[
+                    styles.onlineIndicator,
+                    { backgroundColor: isOnline ? '#10b981' : '#ef4444' }
+                  ]} />
+                </View>
+                <Text style={styles.markerLabel}>
+                  {driver.truck_number || 'N/A'}
+                </Text>
               </View>
-              <Text style={styles.markerLabel}>
-                {driver.truck_number || 'N/A'}
-              </Text>
-            </View>
-          </Marker>
-        ))}
+            </Marker>
+          );
+        })}
+
+        {/* Selected driver route */}
+        {selectedDriver && driverRoute.length > 1 && (
+          <Polyline
+            coordinates={driverRoute}
+            strokeColor={getMarkerColor(selectedDriver.current_status)}
+            strokeWidth={3}
+            strokePattern={[1]}
+          />
+        )}
       </MapView>
 
-      {/* Debug Info */}
-      <View style={[styles.debugInfo, { backgroundColor: theme.card }]}>
-        <Text style={[styles.debugText, { color: theme.text }]}>
-          Drivers: {displayDrivers.length} | 
-          API Key: {Platform.OS === 'android' ? 'Check AndroidManifest.xml' : 'Check AppDelegate'}
+      {/* Status info header */}
+      <View style={[styles.statusHeader, { backgroundColor: theme.card }]}>
+        <View style={styles.statusInfo}>
+          <Icon name="update" size={16} color={theme.textSecondary} />
+          <Text style={[styles.statusText, { color: theme.text }]}>
+            Live: {drivers.length} drivers
+          </Text>
+        </View>
+        <Text style={[styles.lastUpdateText, { color: theme.textSecondary }]}>
+          Updated: {lastUpdate.toLocaleTimeString()}
         </Text>
+        <TouchableOpacity
+          style={[styles.refreshButton, { backgroundColor: theme.primary }]}
+          onPress={loadDriverLocations}
+        >
+          <Icon name="refresh" size={16} color="#ffffff" />
+        </TouchableOpacity>
       </View>
+
+      {/* Driver info panel */}
+      {selectedDriver && (
+        <View style={[styles.driverPanel, { backgroundColor: theme.card }]}>
+          <View style={styles.driverPanelHeader}>
+            <Text style={[styles.driverName, { color: theme.text }]}>
+              {selectedDriver.name || selectedDriver.full_name}
+            </Text>
+            <TouchableOpacity onPress={() => setSelectedDriver(null)}>
+              <Icon name="close" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
+            Truck: {selectedDriver.truck_number}
+          </Text>
+          <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
+            Status: {selectedDriver.current_status?.replace('_', ' ')}
+          </Text>
+          <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
+            Location: {selectedDriver.location || 'Unknown'}
+          </Text>
+          <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
+            Last Update: {formatLastUpdate(selectedDriver.last_location_update)}
+          </Text>
+          {selectedDriver.speed && (
+            <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
+              Speed: {Math.round(selectedDriver.speed)} mph
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* Legend */}
       <View style={[styles.legend, { backgroundColor: theme.card }]}>
-        <Text style={[styles.legendTitle, { color: theme.text }]}>Status</Text>
+        <Text style={[styles.legendTitle, { color: theme.text }]}>Status Legend</Text>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: '#10b981' }]} />
           <Text style={[styles.legendText, { color: theme.textSecondary }]}>Driving</Text>
+          <View style={[styles.onlineDot, { backgroundColor: '#10b981' }]} />
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: '#f59e0b' }]} />
           <Text style={[styles.legendText, { color: theme.textSecondary }]}>On Duty</Text>
+          <View style={[styles.onlineDot, { backgroundColor: '#ef4444' }]} />
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: '#6b7280' }]} />
           <Text style={[styles.legendText, { color: theme.textSecondary }]}>Off Duty</Text>
+          <Text style={[styles.legendOnline, { color: theme.textTertiary }]}>Online/Offline</Text>
         </View>
       </View>
+
+      {/* No drivers message */}
+      {!loading && drivers.length === 0 && (
+        <View style={[styles.noDriversContainer, { backgroundColor: theme.card }]}>
+          <Icon name="location-off" size={48} color={theme.textTertiary} />
+          <Text style={[styles.noDriversText, { color: theme.text }]}>
+            No drivers with location data
+          </Text>
+          <Text style={[styles.noDriversSubtext, { color: theme.textSecondary }]}>
+            Drivers need to be logged in and have location services enabled
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -202,10 +388,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    textAlign: 'center',
   },
   errorContainer: {
     flex: 1,
@@ -217,10 +405,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 16,
-  },
-  errorDetail: {
-    fontSize: 14,
-    marginTop: 8,
     textAlign: 'center',
   },
   retryButton: {
@@ -237,67 +421,165 @@ const styles = StyleSheet.create({
     width: width,
     height: height,
   },
+  statusHeader: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  statusInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  lastUpdateText: {
+    fontSize: 12,
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 6,
+  },
   markerContainer: {
     alignItems: 'center',
   },
   marker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#ffffff',
     elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    position: 'relative',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   markerLabel: {
     marginTop: 4,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
     color: '#000',
     backgroundColor: '#ffffff',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  debugInfo: {
+  driverPanel: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    right: 10,
-    padding: 8,
-    borderRadius: 8,
-    elevation: 3,
+    bottom: 20,
+    left: 20,
+    right: 20,
+    padding: 16,
+    borderRadius: 12,
+    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
-  debugText: {
-    fontSize: 12,
+  driverPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  driverName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  driverDetail: {
+    fontSize: 14,
+    marginBottom: 4,
   },
   legend: {
     position: 'absolute',
     right: 16,
-    bottom: 32,
+    bottom: 100,
     padding: 12,
     borderRadius: 8,
-    elevation: 5,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    minWidth: 120,
   },
   legendTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
     marginBottom: 8,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+    gap: 6,
   },
   legendDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 8,
   },
   legendText: {
+    fontSize: 11,
+    flex: 1,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendOnline: {
+    fontSize: 10,
+  },
+  noDriversContainer: {
+    position: 'absolute',
+    top: '40%',
+    left: '50%',
+    transform: [{ translateX: -100 }, { translateY: -50 }],
+    width: 200,
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 12,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  noDriversText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  noDriversSubtext: {
     fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 16,
   },
 });
 

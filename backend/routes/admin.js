@@ -1,3 +1,4 @@
+// backend/routes/admin.js - Updated with real location tracking
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
@@ -6,7 +7,6 @@ const router = express.Router();
 
 // Simple admin authentication middleware
 const adminAuth = (req, res, next) => {
-  // For demo purposes - in production, use proper admin authentication
   const { username, password } = req.body;
   if (username === 'admin' && password === 'admin123') {
     req.isAdmin = true;
@@ -31,7 +31,7 @@ router.post('/login', adminAuth, (req, res) => {
   });
 });
 
-// Get all active drivers with their current status and location
+// Get all active drivers with their REAL current status and location
 router.get('/drivers/active', async (req, res) => {
   try {
     const [drivers] = await db.query(`
@@ -46,7 +46,7 @@ router.get('/drivers/active', async (req, res) => {
         t.unit_number as truck_number,
         t.vin as truck_vin,
         
-        -- Current status information
+        -- Current status information from log_entries
         (SELECT st.code 
          FROM log_entries le 
          JOIN status_types st ON le.status_id = st.id 
@@ -58,34 +58,29 @@ router.get('/drivers/active', async (req, res) => {
          WHERE le.driver_id = d.id AND le.end_time IS NULL 
          ORDER BY le.start_time DESC LIMIT 1) as status_start_time,
         
-        (SELECT le.location 
-         FROM log_entries le 
-         WHERE le.driver_id = d.id 
-         ORDER BY le.start_time DESC LIMIT 1) as location,
+        -- Real location data from driver_locations table
+        dl.latitude,
+        dl.longitude,
+        dl.accuracy,
+        dl.altitude,
+        dl.heading,
+        dl.speed,
+        dl.address as location,
+        dl.timestamp as last_location_update,
         
+        -- Odometer from latest log entry
         (SELECT le.odometer_start 
          FROM log_entries le 
          WHERE le.driver_id = d.id 
          ORDER BY le.start_time DESC LIMIT 1) as odometer,
         
-        (SELECT MAX(le.start_time) 
-         FROM log_entries le 
-         WHERE le.driver_id = d.id) as last_update,
+        -- Last activity (log entry or location update)
+        GREATEST(
+          IFNULL((SELECT MAX(le.start_time) FROM log_entries le WHERE le.driver_id = d.id), '1970-01-01'),
+          IFNULL(dl.timestamp, '1970-01-01')
+        ) as last_update,
         
-        -- Today's hours
-        (SELECT COALESCE(SUM(
-          CASE 
-            WHEN le.end_time IS NOT NULL 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, le.end_time)
-            WHEN DATE(le.start_time) = CURDATE() 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, NOW())
-            ELSE 0
-          END
-        ), 0) / 60.0
-         FROM log_entries le 
-         JOIN status_types st ON le.status_id = st.id 
-         WHERE le.driver_id = d.id AND st.code = 'DRIVING' AND DATE(le.start_time) = CURDATE()) as drive_hours,
-        
+        -- Today's hours calculation
         (SELECT COALESCE(SUM(
           CASE 
             WHEN le.end_time IS NOT NULL 
@@ -102,12 +97,19 @@ router.get('/drivers/active', async (req, res) => {
         -- Violation count
         (SELECT COUNT(*) 
          FROM violations v 
-         WHERE v.driver_id = d.id AND v.is_resolved = FALSE) as violations_count
+         WHERE v.driver_id = d.id AND v.is_resolved = FALSE) as violations_count,
+         
+        -- Check if driver is online (location updated within last 5 minutes)
+        CASE 
+          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN TRUE 
+          ELSE FALSE 
+        END as is_online
         
       FROM drivers d
       LEFT JOIN carriers c ON d.carrier_id = c.id
       LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
       LEFT JOIN trucks t ON dta.truck_id = t.id
+      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
       WHERE d.is_active = TRUE
       ORDER BY d.full_name
     `);
@@ -125,7 +127,7 @@ router.get('/drivers/active', async (req, res) => {
   }
 });
 
-// Get fleet statistics
+// Get fleet statistics with real data
 router.get('/fleet/stats', async (req, res) => {
   try {
     const [stats] = await db.query(`
@@ -134,9 +136,9 @@ router.get('/fleet/stats', async (req, res) => {
         
         (SELECT COUNT(DISTINCT d.id)
          FROM drivers d
-         JOIN log_entries le ON d.id = le.driver_id
+         JOIN driver_locations dl ON d.id = dl.driver_id
          WHERE d.is_active = TRUE 
-         AND le.start_time >= DATE_SUB(NOW(), INTERVAL 1 HOUR)) as active_drivers,
+         AND dl.timestamp >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)) as active_drivers,
         
         (SELECT COUNT(DISTINCT d.id)
          FROM drivers d
@@ -178,7 +180,7 @@ router.get('/fleet/stats', async (req, res) => {
   }
 });
 
-// Get specific driver details
+// Get specific driver details with real location data
 router.get('/drivers/:driverId', async (req, res) => {
   try {
     const { driverId } = req.params;
@@ -204,24 +206,33 @@ router.get('/drivers/:driverId', async (req, res) => {
          WHERE le.driver_id = d.id AND le.end_time IS NULL 
          ORDER BY le.start_time DESC LIMIT 1) as status_start_time,
         
-        (SELECT le.location 
-         FROM log_entries le 
-         WHERE le.driver_id = d.id 
-         ORDER BY le.start_time DESC LIMIT 1) as location,
+        -- Real location data
+        dl.latitude,
+        dl.longitude,
+        dl.accuracy,
+        dl.altitude,
+        dl.heading,
+        dl.speed,
+        dl.address as location,
+        dl.timestamp as last_location_update,
         
+        -- Odometer
         (SELECT le.odometer_start 
          FROM log_entries le 
          WHERE le.driver_id = d.id 
          ORDER BY le.start_time DESC LIMIT 1) as odometer,
         
-        (SELECT MAX(le.start_time) 
-         FROM log_entries le 
-         WHERE le.driver_id = d.id) as last_update
+        -- Last update
+        GREATEST(
+          IFNULL((SELECT MAX(le.start_time) FROM log_entries le WHERE le.driver_id = d.id), '1970-01-01'),
+          IFNULL(dl.timestamp, '1970-01-01')
+        ) as last_update
         
       FROM drivers d
       LEFT JOIN carriers c ON d.carrier_id = c.id
       LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
       LEFT JOIN trucks t ON dta.truck_id = t.id
+      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
       WHERE d.id = ? AND d.is_active = TRUE
     `, [driverId]);
 
@@ -324,7 +335,7 @@ router.get('/drivers/:driverId', async (req, res) => {
   }
 });
 
-// Get driver location history
+// Get driver location history - REAL DATA
 router.get('/drivers/:driverId/location-history', async (req, res) => {
   try {
     const { driverId } = req.params;
@@ -332,16 +343,21 @@ router.get('/drivers/:driverId/location-history', async (req, res) => {
 
     const [locationHistory] = await db.query(`
       SELECT 
-        le.location,
-        le.start_time,
-        le.odometer_start,
-        st.code as status_code
-      FROM log_entries le
-      JOIN status_types st ON le.status_id = st.id
-      WHERE le.driver_id = ? 
-      AND le.start_time >= DATE_SUB(NOW(), INTERVAL ? HOUR)
-      AND le.location IS NOT NULL
-      ORDER BY le.start_time DESC
+        lh.latitude,
+        lh.longitude,
+        lh.accuracy,
+        lh.altitude,
+        lh.heading,
+        lh.speed,
+        lh.address as location,
+        lh.timestamp,
+        lh.odometer_reading,
+        COALESCE(lh.status, 'UNKNOWN') as status_code
+      FROM location_history lh
+      WHERE lh.driver_id = ? 
+      AND lh.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+      ORDER BY lh.timestamp DESC
+      LIMIT 200
     `, [driverId, hours]);
 
     res.json({
@@ -358,15 +374,67 @@ router.get('/drivers/:driverId/location-history', async (req, res) => {
   }
 });
 
+// Get real-time locations of all active drivers for live map
+router.get('/drivers/live-locations', async (req, res) => {
+  try {
+    const [liveLocations] = await db.query(`
+      SELECT 
+        d.id,
+        d.full_name as name,
+        d.username,
+        t.unit_number as truck_number,
+        dl.latitude,
+        dl.longitude,
+        dl.accuracy,
+        dl.heading,
+        dl.speed,
+        dl.address as location,
+        dl.timestamp as last_update,
+        
+        -- Current status
+        (SELECT st.code 
+         FROM log_entries le 
+         JOIN status_types st ON le.status_id = st.id 
+         WHERE le.driver_id = d.id AND le.end_time IS NULL 
+         ORDER BY le.start_time DESC LIMIT 1) as current_status,
+         
+        -- Check if online (updated within last 5 minutes)
+        CASE 
+          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN TRUE 
+          ELSE FALSE 
+        END as is_online
+        
+      FROM drivers d
+      LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
+      LEFT JOIN trucks t ON dta.truck_id = t.id
+      INNER JOIN driver_locations dl ON d.id = dl.driver_id
+      WHERE d.is_active = TRUE
+      AND dl.latitude IS NOT NULL 
+      AND dl.longitude IS NOT NULL
+      ORDER BY dl.timestamp DESC
+    `);
+
+    res.json({
+      success: true,
+      drivers: liveLocations || []
+    });
+
+  } catch (error) {
+    console.error('Error fetching live locations:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch live locations' 
+    });
+  }
+});
+
 // Send message to driver (placeholder - would need real implementation)
 router.post('/drivers/:driverId/message', async (req, res) => {
   try {
     const { driverId } = req.params;
     const { message } = req.body;
 
-    // In a real implementation, this would send a push notification
-    // or store the message in a messages table
-    
+    // Store the message in database
     await db.query(`
       INSERT INTO driver_messages (driver_id, message, sent_by, sent_at, message_type)
       VALUES (?, ?, 'admin', NOW(), 'admin_alert')
@@ -412,37 +480,6 @@ router.get('/violations', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch violations' 
-    });
-  }
-});
-
-// Update driver location (called by driver app)
-router.post('/drivers/:driverId/update-location', async (req, res) => {
-  try {
-    const { driverId } = req.params;
-    const { latitude, longitude, address, timestamp } = req.body;
-
-    // Store location update in a tracking table
-    await db.query(`
-      INSERT INTO driver_locations (driver_id, latitude, longitude, address, timestamp)
-      VALUES (?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-      latitude = VALUES(latitude),
-      longitude = VALUES(longitude),
-      address = VALUES(address),
-      timestamp = VALUES(timestamp)
-    `, [driverId, latitude, longitude, address, timestamp || new Date()]);
-
-    res.json({
-      success: true,
-      message: 'Location updated successfully'
-    });
-
-  } catch (error) {
-    console.error('Error updating location:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to update location' 
     });
   }
 });

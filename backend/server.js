@@ -1,4 +1,4 @@
-// complete-working-server.js - Your complete server with safe 404 handler
+// backend/server.js - Updated with location routes
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -11,6 +11,7 @@ const logRoutes = require('./routes/logs');
 const inspectionRoutes = require('./routes/inspections');
 const violationRoutes = require('./routes/violations');
 const adminRoutes = require('./routes/admin');
+const locationRoutes = require('./routes/location'); // New location routes
 
 const app = express();
 
@@ -27,6 +28,8 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
+app.use('/api/drivers/location', locationRoutes);
+ // Mount location routes under /api/drivers
 app.use('/api/logs', logRoutes);
 app.use('/api/inspections', inspectionRoutes);
 app.use('/api/violations', violationRoutes);
@@ -55,7 +58,10 @@ app.get('/api/docs', (req, res) => {
       drivers: {
         'GET /api/drivers/profile': 'Get driver profile',
         'GET /api/drivers/weekly-summary': 'Get weekly hours summary',
-        'GET /api/drivers/cycle-info': 'Get 8-day cycle info'
+        'GET /api/drivers/cycle-info': 'Get 8-day cycle info',
+        'POST /api/drivers/location': 'Update driver location',
+        'GET /api/drivers/location': 'Get current driver location',
+        'GET /api/drivers/location/history': 'Get driver location history'
       },
       logs: {
         'GET /api/logs': 'Get driver logs',
@@ -76,13 +82,13 @@ app.get('/api/docs', (req, res) => {
       },
       admin: {
         'POST /api/admin/login': 'Admin login',
-        'GET /api/admin/drivers/active': 'Get all active drivers',
+        'GET /api/admin/drivers/active': 'Get all active drivers with real locations',
+        'GET /api/admin/drivers/live-locations': 'Get live driver locations for map',
         'GET /api/admin/fleet/stats': 'Get fleet statistics',
         'GET /api/admin/drivers/:id': 'Get driver details',
         'GET /api/admin/drivers/:id/location-history': 'Get driver location history',
         'POST /api/admin/drivers/:id/message': 'Send message to driver',
-        'GET /api/admin/violations': 'Get all fleet violations',
-        'POST /api/admin/drivers/:id/update-location': 'Update driver location'
+        'GET /api/admin/violations': 'Get all fleet violations'
       }
     }
   });
@@ -136,7 +142,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// SAFE 404 handler - using middleware without wildcards
+// SAFE 404 handler
 app.use((req, res, next) => {
   res.status(404).json({
     success: false,
@@ -168,7 +174,6 @@ process.on('SIGINT', () => {
 // Unhandled promise rejection handling
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit the process in production, just log the error
   if (process.env.NODE_ENV !== 'production') {
     process.exit(1);
   }
@@ -180,6 +185,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 app.listen(PORT, HOST, () => {
   console.log(`🚛 TruckLog Pro Server is running on ${HOST}:${PORT}`);
   console.log(`📊 Admin Dashboard available at http://${HOST}:${PORT}/api/admin/*`);
+  console.log(`📍 Location Tracking: Real-time GPS tracking enabled`);
   console.log(`📖 API Documentation at http://${HOST}:${PORT}/api/docs`);
   console.log(`❤️  Health Check at http://${HOST}:${PORT}/api/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

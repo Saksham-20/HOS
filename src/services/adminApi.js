@@ -248,6 +248,17 @@ class AdminApiService {
       }
     };
   }
+    // Get real-time locations of all drivers for live map
+  async getLiveDriverLocations() {
+    try {
+      return await this.request('/admin/drivers/live-locations');
+    } catch (error) {
+      console.error('Error fetching live driver locations:', error);
+      return { success: false, drivers: [] };
+    }
+  }
+
 }
+
 
 export default new AdminApiService();

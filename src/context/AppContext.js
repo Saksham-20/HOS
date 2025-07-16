@@ -1,6 +1,9 @@
+// src/context/AppContext.js - Updated with location tracking
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 import ApiService from '../services/api';
+import LocationService from '../services/LocationService';
 
 const AppContext = createContext();
 
@@ -13,6 +16,8 @@ const initialState = {
   statusStartTime: new Date(),
   odometer: 0,
   location: '',
+  currentLocation: null, // GPS coordinates
+  isLocationTracking: false,
   hoursData: {
     drive: 0,
     onDuty: 0,
@@ -62,6 +67,17 @@ const appReducer = (state, action) => {
         location: action.payload.location,
         odometer: action.payload.odometer
       };
+    case 'UPDATE_LOCATION':
+      return {
+        ...state,
+        currentLocation: action.payload,
+        location: action.payload.address || state.location
+      };
+    case 'SET_LOCATION_TRACKING':
+      return {
+        ...state,
+        isLocationTracking: action.payload
+      };
     case 'UPDATE_HOURS':
       return { 
         ...state, 
@@ -102,6 +118,11 @@ const appReducer = (state, action) => {
         ...state, 
         cycleData: action.payload 
       };
+    case 'UPDATE_TIME':
+      return { 
+        ...state, 
+        currentTime: action.payload 
+      };
     default:
       return state;
   }
@@ -123,12 +144,27 @@ export const AppProvider = ({ children }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch current data when logged in
+  // Start/stop location tracking based on login state
   useEffect(() => {
     if (state.isLoggedIn) {
+      startLocationTracking();
       fetchCurrentData();
+    } else {
+      stopLocationTracking();
     }
   }, [state.isLoggedIn]);
+
+  // Handle app state changes for background location tracking
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (state.isLoggedIn && state.isLocationTracking) {
+        LocationService.setBackgroundMode(nextAppState === 'background');
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [state.isLoggedIn, state.isLocationTracking]);
 
   const checkAuthState = async () => {
     try {
@@ -148,14 +184,32 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const startLocationTracking = async () => {
+    try {
+      await LocationService.startLocationTracking();
+      dispatch({ type: 'SET_LOCATION_TRACKING', payload: true });
+      console.log('Location tracking started');
+    } catch (error) {
+      console.error('Failed to start location tracking:', error);
+      dispatch({ type: 'SET_ERROR', payload: error.message });
+    }
+  };
+
+  const stopLocationTracking = () => {
+    LocationService.stopLocationTracking();
+    dispatch({ type: 'SET_LOCATION_TRACKING', payload: false });
+    console.log('Location tracking stopped');
+  };
+
   const fetchCurrentData = async () => {
     try {
       // Get today's logs and summary
       const today = new Date().toISOString().split('T')[0];
-      const [logsResponse, summaryResponse, violationsResponse] = await Promise.all([
+      const [logsResponse, summaryResponse, violationsResponse, locationResponse] = await Promise.all([
         ApiService.getLogs({ date: today }),
         ApiService.getDailySummary(today),
-        ApiService.getViolationSummary()
+        ApiService.getViolationSummary(),
+        ApiService.getCurrentLocation()
       ]);
 
       if (logsResponse.success) {
@@ -175,6 +229,10 @@ export const AppProvider = ({ children }) => {
         if (summaryResponse.violations) {
           dispatch({ type: 'SET_VIOLATIONS', payload: summaryResponse.violations });
         }
+      }
+
+      if (locationResponse.success && locationResponse.location) {
+        dispatch({ type: 'UPDATE_LOCATION', payload: locationResponse.location });
       }
     } catch (error) {
       console.error('Failed to fetch current data:', error);
@@ -229,25 +287,46 @@ export const AppProvider = ({ children }) => {
     try {
       await ApiService.logout();
     } finally {
+      stopLocationTracking();
       dispatch({ type: 'LOGOUT' });
     }
   };
 
   const changeStatus = async (newStatus, additionalInfo = {}) => {
     try {
-      const response = await ApiService.changeStatus({
+      // Get current location if available
+      let locationData = additionalInfo.location || state.location;
+      let coordinates = null;
+
+      if (state.currentLocation) {
+        coordinates = {
+          latitude: state.currentLocation.latitude,
+          longitude: state.currentLocation.longitude,
+          accuracy: state.currentLocation.accuracy
+        };
+        
+        // Use GPS address if no location provided
+        if (!locationData && state.currentLocation.address) {
+          locationData = state.currentLocation.address;
+        }
+      }
+
+      const statusChangeData = {
         status: newStatus,
-        location: additionalInfo.location || state.location,
+        location: locationData,
         odometer: additionalInfo.odometer || state.odometer,
-        notes: additionalInfo.notes
-      });
+        notes: additionalInfo.notes,
+        ...coordinates // Include GPS coordinates
+      };
+
+      const response = await ApiService.changeStatus(statusChangeData);
 
       if (response.success) {
         dispatch({ 
           type: 'SET_STATUS', 
           payload: {
             status: newStatus,
-            location: additionalInfo.location || state.location,
+            location: locationData,
             odometer: additionalInfo.odometer || state.odometer
           }
         });
@@ -308,6 +387,13 @@ export const AppProvider = ({ children }) => {
 
   const addInspection = async (inspectionData) => {
     try {
+      // Include current location in inspection if available
+      if (state.currentLocation) {
+        inspectionData.latitude = state.currentLocation.latitude;
+        inspectionData.longitude = state.currentLocation.longitude;
+        inspectionData.location = inspectionData.location || state.currentLocation.address;
+      }
+
       const response = await ApiService.createInspection(inspectionData);
       
       if (response.success) {
@@ -355,6 +441,31 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const getCurrentLocation = () => {
+    return LocationService.getLastKnownLocation();
+  };
+
+  const getLocationHistory = async (hours = 24) => {
+    try {
+      const response = await ApiService.getLocationHistory(hours);
+      return response;
+    } catch (error) {
+      console.error('Failed to fetch location history:', error);
+      return { success: false, locations: [] };
+    }
+  };
+
+  const forceLocationUpdate = async () => {
+    try {
+      const location = await LocationService.getCurrentLocation();
+      dispatch({ type: 'UPDATE_LOCATION', payload: location });
+      return { success: true, location };
+    } catch (error) {
+      console.error('Failed to get current location:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const value = {
     state,
     dispatch,
@@ -367,7 +478,12 @@ export const AppProvider = ({ children }) => {
     addInspection,
     fetchWeeklySummary,
     fetchCycleInfo,
-    refreshData: fetchCurrentData
+    refreshData: fetchCurrentData,
+    getCurrentLocation,
+    getLocationHistory,
+    forceLocationUpdate,
+    startLocationTracking,
+    stopLocationTracking
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
