@@ -1,4 +1,4 @@
-// backend/routes/admin.js - Updated with real location tracking
+// backend/routes/admin.js - Fixed with proper live locations endpoint
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
@@ -119,7 +119,7 @@ router.get('/drivers/active', async (req, res) => {
       drivers: drivers || []
     });
   } catch (error) {
-    console.error('Error fetching active drivers:', error);
+    console.error('❌ Error fetching active drivers:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch drivers' 
@@ -172,10 +172,69 @@ router.get('/fleet/stats', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching fleet stats:', error);
+    console.error('❌ Error fetching fleet stats:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch fleet statistics' 
+    });
+  }
+});
+
+// Get real-time locations of all active drivers for live map - FIXED ENDPOINT
+router.get('/drivers/live-locations', async (req, res) => {
+  try {
+    console.log('📍 Fetching live driver locations...');
+    
+    const [liveLocations] = await db.query(`
+      SELECT 
+        d.id,
+        d.full_name as name,
+        d.username,
+        t.unit_number as truck_number,
+        dl.latitude,
+        dl.longitude,
+        dl.accuracy,
+        dl.heading,
+        dl.speed,
+        dl.address as location,
+        dl.timestamp as last_update,
+        
+        -- Current status
+        (SELECT st.code 
+         FROM log_entries le 
+         JOIN status_types st ON le.status_id = st.id 
+         WHERE le.driver_id = d.id AND le.end_time IS NULL 
+         ORDER BY le.start_time DESC LIMIT 1) as current_status,
+         
+        -- Check if online (updated within last 5 minutes)
+        CASE 
+          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN TRUE 
+          ELSE FALSE 
+        END as is_online
+        
+      FROM drivers d
+      LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
+      LEFT JOIN trucks t ON dta.truck_id = t.id
+      INNER JOIN driver_locations dl ON d.id = dl.driver_id
+      WHERE d.is_active = TRUE
+      AND dl.latitude IS NOT NULL 
+      AND dl.longitude IS NOT NULL
+      AND dl.timestamp >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
+      ORDER BY dl.timestamp DESC
+    `);
+
+    console.log(`✅ Found ${liveLocations.length} drivers with location data`);
+
+    res.json({
+      success: true,
+      drivers: liveLocations || []
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching live locations:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch live locations' 
     });
   }
 });
@@ -327,7 +386,7 @@ router.get('/drivers/:driverId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching driver details:', error);
+    console.error('❌ Error fetching driver details:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch driver details' 
@@ -366,64 +425,10 @@ router.get('/drivers/:driverId/location-history', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching location history:', error);
+    console.error('❌ Error fetching location history:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch location history' 
-    });
-  }
-});
-
-// Get real-time locations of all active drivers for live map
-router.get('/drivers/live-locations', async (req, res) => {
-  try {
-    const [liveLocations] = await db.query(`
-      SELECT 
-        d.id,
-        d.full_name as name,
-        d.username,
-        t.unit_number as truck_number,
-        dl.latitude,
-        dl.longitude,
-        dl.accuracy,
-        dl.heading,
-        dl.speed,
-        dl.address as location,
-        dl.timestamp as last_update,
-        
-        -- Current status
-        (SELECT st.code 
-         FROM log_entries le 
-         JOIN status_types st ON le.status_id = st.id 
-         WHERE le.driver_id = d.id AND le.end_time IS NULL 
-         ORDER BY le.start_time DESC LIMIT 1) as current_status,
-         
-        -- Check if online (updated within last 5 minutes)
-        CASE 
-          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN TRUE 
-          ELSE FALSE 
-        END as is_online
-        
-      FROM drivers d
-      LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
-      LEFT JOIN trucks t ON dta.truck_id = t.id
-      INNER JOIN driver_locations dl ON d.id = dl.driver_id
-      WHERE d.is_active = TRUE
-      AND dl.latitude IS NOT NULL 
-      AND dl.longitude IS NOT NULL
-      ORDER BY dl.timestamp DESC
-    `);
-
-    res.json({
-      success: true,
-      drivers: liveLocations || []
-    });
-
-  } catch (error) {
-    console.error('Error fetching live locations:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch live locations' 
     });
   }
 });
@@ -446,7 +451,7 @@ router.post('/drivers/:driverId/message', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('❌ Error sending message:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to send message' 
@@ -476,7 +481,7 @@ router.get('/violations', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching violations:', error);
+    console.error('❌ Error fetching violations:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch violations' 

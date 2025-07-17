@@ -1,5 +1,4 @@
-
-// routes/auth.js
+// backend/routes/auth.js - Fixed to NOT require authentication for login/register
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -9,7 +8,7 @@ const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Register new driver
+// Register new driver - NO AUTH REQUIRED
 router.post('/register', [
   body('username').isLength({ min: 3 }).trim(),
   body('password').isLength({ min: 6 }),
@@ -20,8 +19,11 @@ router.post('/register', [
   body('truckNumber').notEmpty().trim()
 ], async (req, res) => {
   try {
+    console.log('📝 Registration attempt for:', req.body.username);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
@@ -100,6 +102,8 @@ router.post('/register', [
 
       await connection.commit();
 
+      console.log('✅ Driver registered successfully:', username);
+
       res.status(201).json({
         success: true,
         message: 'Driver registered successfully',
@@ -112,24 +116,28 @@ router.post('/register', [
       connection.release();
     }
   } catch (error) {
+    console.error('❌ Registration error:', error);
     res.status(400).json({ success: false, message: error.message });
   }
 });
 
-// Login
+// Login - NO AUTH REQUIRED
 router.post('/login', [
   body('username').notEmpty(),
   body('password').notEmpty()
 ], async (req, res) => {
   try {
+    console.log('🔑 Login attempt for:', req.body.username);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
     const { username, password } = req.body;
 
-    // Get driver
+    // Get driver with carrier info
     const [drivers] = await db.query(
       `SELECT d.*, c.name as carrier_name 
        FROM drivers d 
@@ -139,6 +147,7 @@ router.post('/login', [
     );
 
     if (drivers.length === 0) {
+      console.log('❌ Driver not found:', username);
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid credentials' 
@@ -150,6 +159,7 @@ router.post('/login', [
     // Check password
     const isMatch = await bcrypt.compare(password, driver.password_hash);
     if (!isMatch) {
+      console.log('❌ Invalid password for:', username);
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid credentials' 
@@ -166,25 +176,32 @@ router.post('/login', [
 
     // Generate token
     const token = jwt.sign(
-      { driverId: driver.id },
+      { driverId: driver.id, username: driver.username },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Save session
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    // Save session (optional - comment out if sessions table doesn't exist)
+    try {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await db.query(
-      'INSERT INTO sessions (driver_id, token, expires_at) VALUES (?, ?, ?)',
-      [driver.id, token, expiresAt]
-    );
+      await db.query(
+        'INSERT INTO sessions (driver_id, token, expires_at) VALUES (?, ?, ?)',
+        [driver.id, token, expiresAt]
+      );
+    } catch (sessionError) {
+      console.log('⚠️ Session save failed (table might not exist):', sessionError.message);
+      // Continue without session save
+    }
 
     // Update last login
     await db.query(
       'UPDATE drivers SET last_login = NOW() WHERE id = ?',
       [driver.id]
     );
+
+    console.log('✅ Login successful for:', username);
 
     res.json({
       success: true,
@@ -199,22 +216,41 @@ router.post('/login', [
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Login error:', error);
+    res.status(500).json({ success: false, message: 'Login failed. Please try again.' });
   }
 });
 
-// Logout
+// Logout - REQUIRES AUTH
 router.post('/logout', authMiddleware, async (req, res) => {
   try {
-    await db.query(
-      'DELETE FROM sessions WHERE token = ?',
-      [req.token]
-    );
+    console.log('🚪 Logout for driver:', req.driver.id);
+    
+    // Delete session if sessions table exists
+    try {
+      await db.query(
+        'DELETE FROM sessions WHERE token = ?',
+        [req.token]
+      );
+    } catch (sessionError) {
+      console.log('⚠️ Session delete failed (table might not exist):', sessionError.message);
+    }
 
+    console.log('✅ Logout successful');
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Logout error:', error);
+    res.status(500).json({ success: false, message: 'Logout failed' });
   }
+});
+
+// Test endpoint to check if auth is working - NO AUTH REQUIRED
+router.get('/test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Auth routes are working',
+    timestamp: new Date().toISOString()
+  });
 });
 
 module.exports = router;

@@ -74,7 +74,7 @@ router.post('/status', authMiddleware, [
     // Call stored procedure to change status
     await db.query(
       'CALL change_driver_status(?, ?, ?, ?, ?, ?)',
-      [req.driver.id, truckId, status, location, odometer, notes || null]
+        [req.driver.id, status, location, odometer, notes || null, truckId]
     );
 
     // Get updated status

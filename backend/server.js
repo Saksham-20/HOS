@@ -1,4 +1,4 @@
-// backend/server.js - Updated with location routes
+// backend/server.js - Fixed with correct route mounting
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -11,7 +11,7 @@ const logRoutes = require('./routes/logs');
 const inspectionRoutes = require('./routes/inspections');
 const violationRoutes = require('./routes/violations');
 const adminRoutes = require('./routes/admin');
-const locationRoutes = require('./routes/location'); // New location routes
+const locationRoutes = require('./routes/location');
 
 const app = express();
 
@@ -25,11 +25,10 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+// Routes - FIXED MOUNTING
 app.use('/api/auth', authRoutes);
-app.use('/api/drivers', driverRoutes);
-app.use('/api/drivers/location', locationRoutes);
- // Mount location routes under /api/drivers
+app.use('/api/drivers', driverRoutes);           // This handles /api/drivers/profile, etc.
+app.use('/api/location', locationRoutes);        // This handles /api/location endpoints
 app.use('/api/logs', logRoutes);
 app.use('/api/inspections', inspectionRoutes);
 app.use('/api/violations', violationRoutes);
@@ -58,10 +57,12 @@ app.get('/api/docs', (req, res) => {
       drivers: {
         'GET /api/drivers/profile': 'Get driver profile',
         'GET /api/drivers/weekly-summary': 'Get weekly hours summary',
-        'GET /api/drivers/cycle-info': 'Get 8-day cycle info',
-        'POST /api/drivers/location': 'Update driver location',
-        'GET /api/drivers/location': 'Get current driver location',
-        'GET /api/drivers/location/history': 'Get driver location history'
+        'GET /api/drivers/cycle-info': 'Get 8-day cycle info'
+      },
+      location: {
+        'POST /api/location': 'Update driver location',
+        'GET /api/location': 'Get current driver location',
+        'GET /api/location/history': 'Get driver location history'
       },
       logs: {
         'GET /api/logs': 'Get driver logs',
@@ -142,7 +143,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// SAFE 404 handler
+// 404 handler
 app.use((req, res, next) => {
   res.status(404).json({
     success: false,
@@ -152,6 +153,7 @@ app.use((req, res, next) => {
       '/api/docs',
       '/api/auth/*',
       '/api/drivers/*',
+      '/api/location/*',
       '/api/logs/*',
       '/api/inspections/*',
       '/api/violations/*',

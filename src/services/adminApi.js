@@ -1,7 +1,7 @@
-// src/services/adminApi.js
+// src/services/adminApi.js - Fixed with updated URL
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.1.30:3000/api'; // Change to your server URL
+const API_BASE_URL = 'http://192.168.1.30:3000/api'; // Updated server URL
 
 class AdminApiService {
   constructor() {
@@ -46,21 +46,25 @@ class AdminApiService {
     };
 
     try {
+      console.log(`🌐 Admin API Request: ${options.method || 'GET'} ${this.baseURL}${endpoint}`);
+      
       const response = await fetch(`${this.baseURL}${endpoint}`, config);
       const data = await response.json();
 
       if (!response.ok) {
+        console.error(`❌ Admin API Error: ${response.status} - ${data.message || 'Unknown error'}`);
         throw new Error(data.message || 'API request failed');
       }
 
+      console.log(`✅ Admin API Success: ${endpoint}`);
       return data;
     } catch (error) {
-      console.error('API Request Error:', error);
+      console.error(`❌ Admin API Request failed for ${endpoint}:`, error);
       throw error;
     }
   }
 
-  // Real API endpoints - connected to database
+  // Admin authentication
   async loginAdmin(username, password) {
     const response = await this.request('/admin/login', {
       method: 'POST',
@@ -128,6 +132,16 @@ class AdminApiService {
     } catch (error) {
       console.error('Error fetching location history:', error);
       return { success: false, locations: [] };
+    }
+  }
+
+  // Get real-time locations of all drivers for live map
+  async getLiveDriverLocations() {
+    try {
+      return await this.request('/admin/drivers/live-locations');
+    } catch (error) {
+      console.error('Error fetching live driver locations:', error);
+      return { success: false, drivers: [] };
     }
   }
 
@@ -223,42 +237,16 @@ class AdminApiService {
     }
   }
 
-  // Legacy mock methods - remove these once fully migrated
-  async getDriverLocation_DEPRECATED(driverId) {
-    console.warn('Using deprecated mock method - migrate to real API');
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    const mockLocations = [
-      { lat: 37.7749, lng: -122.4194, address: 'San Francisco, CA' },
-      { lat: 34.0522, lng: -118.2437, address: 'Los Angeles, CA' },
-      { lat: 40.7128, lng: -74.0060, address: 'New York, NY' },
-      { lat: 41.8781, lng: -87.6298, address: 'Chicago, IL' },
-      { lat: 29.7604, lng: -95.3698, address: 'Houston, TX' }
-    ];
-
-    const randomLocation = mockLocations[Math.floor(Math.random() * mockLocations.length)];
-
-    return {
-      success: true,
-      location: {
-        ...randomLocation,
-        timestamp: new Date(),
-        speed: Math.floor(Math.random() * 65) + 5,
-        heading: Math.floor(Math.random() * 360)
-      }
-    };
-  }
-    // Get real-time locations of all drivers for live map
-  async getLiveDriverLocations() {
+  // Test connection
+  async testConnection() {
     try {
-      return await this.request('/admin/drivers/live-locations');
+      const response = await this.request('/health');
+      return response;
     } catch (error) {
-      console.error('Error fetching live driver locations:', error);
-      return { success: false, drivers: [] };
+      console.error('❌ Admin connection test failed:', error);
+      return { success: false, error: error.message };
     }
   }
-
 }
-
 
 export default new AdminApiService();

@@ -1,7 +1,7 @@
-// src/services/api.js - Fixed with correct endpoint structure
+// src/services/api.js - Fixed with correct endpoint paths
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.1.30:3000/api'; // Change to your server URL
+const API_BASE_URL = 'http://192.168.1.30:3000/api'; // Updated server URL
 
 class ApiService {
   constructor() {
@@ -97,18 +97,18 @@ class ApiService {
   // Location endpoints - FIXED PATHS
   async updateLocation(locationData) {
     console.log('📍 Updating location:', locationData);
-    return this.request('/drivers/location', {
+    return this.request('/location', {  // Changed from /drivers/location
       method: 'POST',
       body: JSON.stringify(locationData),
     });
   }
 
   async getCurrentLocation() {
-    return this.request('/drivers/location');
+    return this.request('/location');  // Changed from /drivers/location
   }
 
   async getLocationHistory(hours = 24) {
-    return this.request(`/drivers/location/history?hours=${hours}`);
+    return this.request(`/location/history?hours=${hours}`);  // Changed from /drivers/location/history
   }
 
   // Log endpoints with location support
