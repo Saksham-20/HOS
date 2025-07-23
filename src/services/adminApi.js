@@ -1,7 +1,7 @@
 // src/services/adminApi.js - Fixed with updated URL
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.1.30:3000/api'; // Updated server URL
+const API_BASE_URL = 'http://192.168.1.22:3000/api'; // Updated server URL
 
 class AdminApiService {
   constructor() {

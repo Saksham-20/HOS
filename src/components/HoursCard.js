@@ -1,5 +1,5 @@
-// src/components/HoursCard.js - Updated with dark mode support
-import React, { useState, useEffect } from 'react';
+// src/components/HoursCard.js - Fixed memory leaks with proper cleanup
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { useThemedStyles } from '../hooks/useThemedStyles';
@@ -10,41 +10,102 @@ const HoursCard = () => {
   const [animatedValue] = useState(new Animated.Value(0));
   const [currentTime, setCurrentTime] = useState(new Date());
   const styles = useThemedStyles(createStyles);
+  
+  // Use refs to prevent memory leaks
+  const mountedRef = useRef(true);
+  const timeIntervalRef = useRef(null);
+  const animationRef = useRef(null);
 
-  // Update current time every minute
+  // Cleanup on unmount
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(timer);
+    return () => {
+      mountedRef.current = false;
+      if (timeIntervalRef.current) {
+        clearInterval(timeIntervalRef.current);
+      }
+      if (animationRef.current) {
+        animationRef.current.stop();
+      }
+    };
   }, []);
+
+  // Update current time every minute with cleanup
+  useEffect(() => {
+    timeIntervalRef.current = setInterval(() => {
+      if (mountedRef.current) {
+        setCurrentTime(new Date());
+      }
+    }, 60000);
+
+    return () => {
+      if (timeIntervalRef.current) {
+        clearInterval(timeIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Memoized data fetching to prevent unnecessary re-renders
+  const fetchData = useCallback(async () => {
+    if (!mountedRef.current) return;
+    
+    try {
+      if (selectedView === 'weekly') {
+        await fetchWeeklySummary();
+      } else if (selectedView === 'cycle') {
+        await fetchCycleInfo();
+      }
+    } catch (error) {
+      console.error('Error fetching hours data:', error);
+    }
+  }, [selectedView, fetchWeeklySummary, fetchCycleInfo]);
 
   // Fetch data based on selected view
   useEffect(() => {
-    if (selectedView === 'weekly') {
-      fetchWeeklySummary();
-    } else if (selectedView === 'cycle') {
-      fetchCycleInfo();
-    }
-  }, [selectedView]);
+    fetchData();
+  }, [fetchData]);
 
-  // Animation for view transitions
+  // Animation for view transitions with cleanup
   useEffect(() => {
-    Animated.timing(animatedValue, {
+    if (animationRef.current) {
+      animationRef.current.stop();
+    }
+
+    animatedValue.setValue(0);
+    
+    animationRef.current = Animated.timing(animatedValue, {
       toValue: 1,
       duration: 300,
       useNativeDriver: true,
-    }).start();
-  }, [selectedView]);
+    });
 
-  const formatHours = (hours) => {
+    animationRef.current.start((finished) => {
+      if (!finished && animationRef.current) {
+        animationRef.current = null;
+      }
+    });
+
+    return () => {
+      if (animationRef.current) {
+        animationRef.current.stop();
+        animationRef.current = null;
+      }
+    };
+  }, [selectedView, animatedValue]);
+
+  const formatHours = useCallback((hours) => {
     if (!hours || hours === 0) return '0h';
     const h = Math.floor(hours);
     const m = Math.round((hours - h) * 60);
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  };
+  }, []);
 
-  const renderWeeklyView = () => {
+  const handleTabChange = useCallback((view) => {
+    if (mountedRef.current && view !== selectedView) {
+      setSelectedView(view);
+    }
+  }, [selectedView]);
+
+  const renderWeeklyView = useCallback(() => {
     const weekData = state.weeklyData || {
       total_drive_hours: 0,
       total_duty_hours: 0,
@@ -89,9 +150,9 @@ const HoursCard = () => {
         </View>
       </View>
     );
-  };
+  }, [state.weeklyData, formatHours, styles]);
 
-  const renderCycleView = () => {
+  const renderCycleView = useCallback(() => {
     const cycleInfo = state.cycleData || {
       currentDay: 1,
       totalHours: 0,
@@ -135,9 +196,9 @@ const HoursCard = () => {
         </View>
       </View>
     );
-  };
+  }, [state.cycleData, formatHours, styles, currentTime]);
 
-  const renderViolationView = () => {
+  const renderViolationView = useCallback(() => {
     const violationSummary = state.violationSummary || {
       total_violations: 0,
       active_violations: 0,
@@ -200,9 +261,9 @@ const HoursCard = () => {
         </View>
       </View>
     );
-  };
+  }, [state.violationSummary, currentTime, styles]);
 
-  const renderContent = () => {
+  const renderContent = useCallback(() => {
     switch (selectedView) {
       case 'weekly':
         return renderWeeklyView();
@@ -213,14 +274,14 @@ const HoursCard = () => {
       default:
         return renderWeeklyView();
     }
-  };
+  }, [selectedView, renderWeeklyView, renderCycleView, renderViolationView]);
 
   return (
     <View style={styles.container}>
       <View style={styles.tabContainer}>
         <TouchableOpacity 
           style={[styles.tab, selectedView === 'weekly' && styles.activeTab]}
-          onPress={() => setSelectedView('weekly')}
+          onPress={() => handleTabChange('weekly')}
         >
           <Text style={[styles.tabText, selectedView === 'weekly' && styles.activeTabText]}>
             Weekly
@@ -228,7 +289,7 @@ const HoursCard = () => {
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, selectedView === 'cycle' && styles.activeTab]}
-          onPress={() => setSelectedView('cycle')}
+          onPress={() => handleTabChange('cycle')}
         >
           <Text style={[styles.tabText, selectedView === 'cycle' && styles.activeTabText]}>
             Cycle
@@ -236,7 +297,7 @@ const HoursCard = () => {
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, selectedView === 'violations' && styles.activeTab]}
-          onPress={() => setSelectedView('violations')}
+          onPress={() => handleTabChange('violations')}
         >
           <Text style={[styles.tabText, selectedView === 'violations' && styles.activeTabText]}>
             Compliance
@@ -247,6 +308,125 @@ const HoursCard = () => {
       <Animated.View style={[styles.content, { opacity: animatedValue }]}>
         {renderContent()}
       </Animated.View>
+    </View>
+  );
+};
+
+// Enhanced StatusCard with memory leak fixes
+const StatusCard = () => {
+  const { state } = useApp();
+  const { theme } = useTheme();
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Use refs to prevent memory leaks
+  const mountedRef = useRef(true);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    // Cleanup function
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      if (mountedRef.current) {
+        setCurrentTime(new Date());
+      }
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const getStatusColor = useCallback((status) => {
+    switch (status) {
+      case 'DRIVING': return theme.driving;
+      case 'ON_DUTY': return theme.onDuty;
+      case 'SLEEPER': return theme.sleeper;
+      case 'OFF_DUTY': return theme.offDuty;
+      default: return theme.offDuty;
+    }
+  }, [theme]);
+
+  const getStatusIcon = useCallback((status) => {
+    switch (status) {
+      case 'DRIVING': return 'local-shipping';
+      case 'ON_DUTY': return 'work';
+      case 'SLEEPER': return 'hotel';
+      case 'OFF_DUTY': return 'home';
+      default: return 'help';
+    }
+  }, []);
+
+  const formatDuration = useCallback(() => {
+    if (!state.statusStartTime) return '0m';
+    
+    const diff = currentTime - new Date(state.statusStartTime);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  }, [currentTime, state.statusStartTime]);
+
+  return (
+    <View style={[styles.container, { 
+      backgroundColor: theme.card,
+      shadowColor: theme.shadowColor,
+      shadowOpacity: theme.shadowOpacity,
+    }]}>
+      <View style={[styles.header, { borderBottomColor: theme.borderLight }]}>
+        <Text style={[styles.title, { color: theme.text }]}>Current Status</Text>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(state.currentStatus) }]}>
+          <Icon name={getStatusIcon(state.currentStatus)} size={16} color="#ffffff" />
+          <Text style={styles.statusText}>{state.currentStatus.replace('_', ' ')}</Text>
+        </View>
+      </View>
+      
+      <View style={styles.content}>
+        <View style={styles.infoRow}>
+          <View style={styles.infoItem}>
+            <Icon name="access-time" size={20} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Time</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {currentTime.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+              })}
+            </Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Icon name="timer" size={20} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Duration</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{formatDuration()}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Icon name="speed" size={20} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Odometer</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{state.odometer || 0} mi</Text>
+          </View>
+        </View>
+        
+        <View style={[styles.locationSection, { backgroundColor: theme.background }]}>
+          <Icon name="location-on" size={20} color={theme.textSecondary} />
+          <Text style={[styles.locationText, { color: theme.text }]}>
+            {state.location || 'No location set'}
+          </Text>
+        </View>
+      </View>
     </View>
   );
 };
@@ -359,6 +539,58 @@ const createStyles = (theme) => ({
     height: 4,
     borderRadius: 2,
   },
+  // StatusCard styles
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  statusText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  infoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  infoLabel: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  infoValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  locationSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 14,
+  },
 });
 
 export default HoursCard;
+export { StatusCard };

@@ -1,7 +1,7 @@
-// backend/routes/drivers.js - Fixed to apply auth middleware properly
+// backend/routes/drivers.js - Fixed to use destructured auth middleware import
 const express = require('express');
 const db = require('../config/database');
-const authMiddleware = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth'); // Fixed import
 
 const router = express.Router();
 

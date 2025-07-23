@@ -1,21 +1,23 @@
-// backend/routes/location.js - WORKING VERSION
+// backend/routes/inspections.js - FIXED VERSION
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
-const authMiddleware = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth'); // FIXED: Destructured import
 
 const router = express.Router();
 
-console.log('📍 Location routes module loaded');
+console.log('🔍 Inspections routes module loaded');
 
-// Update driver location - POST /location
-router.post('/location', authMiddleware, [
-  body('latitude').isFloat({ min: -90, max: 90 }),
-  body('longitude').isFloat({ min: -180, max: 180 }),
-  body('timestamp').optional().isISO8601()
+// Create new inspection - POST /inspections
+router.post('/inspections', authMiddleware, [
+  body('inspection_type').isIn(['pre_trip', 'post_trip']).withMessage('Invalid inspection type'),
+  body('vehicle_id').isInt().withMessage('Valid vehicle ID required'),
+  body('odometer_reading').isInt({ min: 0 }).withMessage('Valid odometer reading required'),
+  body('defects').optional().isArray().withMessage('Defects must be an array'),
+  body('signature_data').optional().isString().withMessage('Signature data must be a string')
 ], async (req, res) => {
   try {
-    console.log('📍 POST /location called by driver:', req.driver.id);
+    console.log('🔍 POST /inspections called by driver:', req.driver.id);
     
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -23,146 +25,208 @@ router.post('/location', authMiddleware, [
     }
 
     const {
-      latitude,
-      longitude,
-      accuracy,
-      altitude,
-      heading,
-      speed,
-      address,
-      timestamp
+      inspection_type,
+      vehicle_id,
+      odometer_reading,
+      defects = [],
+      signature_data,
+      notes
     } = req.body;
 
-    const locationTimestamp = timestamp ? new Date(timestamp) : new Date();
+    console.log(`🔍 Creating ${inspection_type} inspection for driver ${req.driver.id}`);
 
-    console.log(`📍 Updating location for driver ${req.driver.id}:`, {
-      latitude, longitude, accuracy, address
-    });
-
-    // Update or insert current location
-    await db.query(`
-      INSERT INTO driver_locations (
-        driver_id, latitude, longitude, accuracy, altitude, 
-        heading, speed, address, timestamp
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        latitude = VALUES(latitude),
-        longitude = VALUES(longitude),
-        accuracy = VALUES(accuracy),
-        altitude = VALUES(altitude),
-        heading = VALUES(heading),
-        speed = VALUES(speed),
-        address = VALUES(address),
-        timestamp = VALUES(timestamp),
-        updated_at = CURRENT_TIMESTAMP
+    // Insert inspection record
+    const [result] = await db.query(`
+      INSERT INTO inspections (
+        driver_id, vehicle_id, inspection_type, odometer_reading,
+        signature_data, notes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, NOW())
     `, [
-      req.driver.id, latitude, longitude, accuracy, altitude,
-      heading, speed, address, locationTimestamp
+      req.driver.id, vehicle_id, inspection_type, odometer_reading,
+      signature_data, notes
     ]);
 
-    // Add to location history
-    await db.query(`
-      INSERT INTO location_history (
-        driver_id, latitude, longitude, accuracy, altitude,
-        heading, speed, address, timestamp
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      req.driver.id, latitude, longitude, accuracy, altitude,
-      heading, speed, address, locationTimestamp
-    ]);
+    const inspectionId = result.insertId;
 
-    // Update current log entry with location if exists
-    await db.query(`
-      UPDATE log_entries 
-      SET latitude = ?, longitude = ?, accuracy = ?, address = ?
-      WHERE driver_id = ? AND end_time IS NULL
-    `, [latitude, longitude, accuracy, address, req.driver.id]);
+    // Insert defects if any
+    if (defects.length > 0) {
+      const defectValues = defects.map(defect => [
+        inspectionId,
+        defect.category,
+        defect.description,
+        defect.severity || 'minor',
+        defect.corrected || false
+      ]);
 
-    console.log(`✅ Location updated successfully for driver ${req.driver.id}`);
+      await db.query(`
+        INSERT INTO inspection_defects (
+          inspection_id, category, description, severity, corrected
+        ) VALUES ?
+      `, [defectValues]);
+    }
+
+    console.log(`✅ Inspection created successfully with ID: ${inspectionId}`);
 
     res.json({
       success: true,
-      message: 'Location updated successfully'
+      message: 'Inspection created successfully',
+      inspection_id: inspectionId
     });
 
   } catch (error) {
-    console.error('❌ Error updating location:', error);
+    console.error('❌ Error creating inspection:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get current driver location - GET /location
-router.get('/location', authMiddleware, async (req, res) => {
+// Get driver's inspections - GET /inspections
+router.get('/inspections', authMiddleware, async (req, res) => {
   try {
-    console.log('📍 GET /location called by driver:', req.driver.id);
+    console.log('🔍 GET /inspections called by driver:', req.driver.id);
     
-    const [location] = await db.query(`
-      SELECT * FROM driver_locations 
-      WHERE driver_id = ?
-      ORDER BY timestamp DESC 
-      LIMIT 1
-    `, [req.driver.id]);
+    const { limit = 20, offset = 0, type } = req.query;
+    
+    let whereClause = 'WHERE i.driver_id = ?';
+    let queryParams = [req.driver.id];
+    
+    if (type) {
+      whereClause += ' AND i.inspection_type = ?';
+      queryParams.push(type);
+    }
 
-    if (location.length === 0) {
-      return res.json({
-        success: true,
-        location: null,
-        message: 'No location data available'
+    const [inspections] = await db.query(`
+      SELECT 
+        i.*,
+        v.vehicle_number,
+        v.make,
+        v.model,
+        v.year,
+        COUNT(id_defects.id) as defect_count
+      FROM inspections i
+      LEFT JOIN vehicles v ON i.vehicle_id = v.id
+      LEFT JOIN inspection_defects id_defects ON i.id = id_defects.inspection_id
+      ${whereClause}
+      GROUP BY i.id
+      ORDER BY i.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...queryParams, parseInt(limit), parseInt(offset)]);
+
+    res.json({
+      success: true,
+      inspections: inspections || []
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching inspections:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get specific inspection details - GET /inspections/:id
+router.get('/inspections/:id', authMiddleware, async (req, res) => {
+  try {
+    const inspectionId = req.params.id;
+    console.log(`🔍 GET /inspections/${inspectionId} called by driver:`, req.driver.id);
+    
+    // Get inspection details
+    const [inspections] = await db.query(`
+      SELECT 
+        i.*,
+        v.vehicle_number,
+        v.make,
+        v.model,
+        v.year,
+        v.vin,
+        d.full_name as driver_name
+      FROM inspections i
+      LEFT JOIN vehicles v ON i.vehicle_id = v.id
+      LEFT JOIN drivers d ON i.driver_id = d.id
+      WHERE i.id = ? AND i.driver_id = ?
+    `, [inspectionId, req.driver.id]);
+
+    if (inspections.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inspection not found'
       });
     }
 
+    // Get defects for this inspection
+    const [defects] = await db.query(`
+      SELECT * FROM inspection_defects 
+      WHERE inspection_id = ?
+      ORDER BY severity DESC, created_at ASC
+    `, [inspectionId]);
+
+    const inspection = inspections[0];
+    inspection.defects = defects || [];
+
     res.json({
       success: true,
-      location: location[0]
+      inspection: inspection
     });
 
   } catch (error) {
-    console.error('❌ Error fetching location:', error);
+    console.error('❌ Error fetching inspection details:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get location history - GET /location/history
-router.get('/location/history', authMiddleware, async (req, res) => {
+// Update inspection - PUT /inspections/:id
+router.put('/inspections/:id', authMiddleware, [
+  body('signature_data').optional().isString(),
+  body('notes').optional().isString()
+], async (req, res) => {
   try {
-    console.log('📍 GET /location/history called by driver:', req.driver.id);
+    const inspectionId = req.params.id;
+    console.log(`🔍 PUT /inspections/${inspectionId} called by driver:`, req.driver.id);
     
-    const { hours = 24, limit = 100 } = req.query;
-    
-    const [locations] = await db.query(`
-      SELECT lh.*, 
-             COALESCE(
-               (SELECT st.code 
-                FROM log_entries le 
-                JOIN status_types st ON le.status_id = st.id 
-                WHERE le.driver_id = ? 
-                AND le.start_time <= lh.timestamp 
-                AND (le.end_time IS NULL OR le.end_time >= lh.timestamp)
-                ORDER BY le.start_time DESC 
-                LIMIT 1), 
-               'UNKNOWN'
-             ) as status_code
-      FROM location_history lh
-      WHERE lh.driver_id = ? 
-        AND lh.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
-      ORDER BY lh.timestamp DESC
-      LIMIT ?
-    `, [req.driver.id, req.driver.id, hours, parseInt(limit)]);
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { signature_data, notes } = req.body;
+
+    // Verify inspection belongs to driver
+    const [existing] = await db.query(`
+      SELECT id FROM inspections 
+      WHERE id = ? AND driver_id = ?
+    `, [inspectionId, req.driver.id]);
+
+    if (existing.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inspection not found'
+      });
+    }
+
+    // Update inspection
+    await db.query(`
+      UPDATE inspections 
+      SET signature_data = COALESCE(?, signature_data),
+          notes = COALESCE(?, notes),
+          updated_at = NOW()
+      WHERE id = ?
+    `, [signature_data, notes, inspectionId]);
+
+    console.log(`✅ Inspection ${inspectionId} updated successfully`);
 
     res.json({
       success: true,
-      locations: locations || []
+      message: 'Inspection updated successfully'
     });
 
   } catch (error) {
-    console.error('❌ Error fetching location history:', error);
+    console.error('❌ Error updating inspection:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 module.exports = router;
 
-console.log('📍 Location routes exported - Available endpoints:');
-console.log('  - POST /location (update driver location)');
-console.log('  - GET /location (get current driver location)');
-console.log('  - GET /location/history (get driver location history)');
+console.log('🔍 Inspections routes exported - Available endpoints:');
+console.log('  - POST /inspections (create new inspection)');
+console.log('  - GET /inspections (get driver inspections)');
+console.log('  - GET /inspections/:id (get specific inspection)');
+console.log('  - PUT /inspections/:id (update inspection)');

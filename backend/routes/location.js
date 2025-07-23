@@ -1,17 +1,22 @@
+// backend/routes/location.js - FIXED VERSION
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
-const authMiddleware = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth'); // FIXED: Destructured import
 
 const router = express.Router();
 
-// Update driver location
-router.post('/', authMiddleware, [
+console.log('📍 Location routes module loaded');
+
+// Update driver location - POST /location
+router.post('/location', authMiddleware, [
   body('latitude').isFloat({ min: -90, max: 90 }),
   body('longitude').isFloat({ min: -180, max: 180 }),
   body('timestamp').optional().isISO8601()
 ], async (req, res) => {
   try {
+    console.log('📍 POST /location called by driver:', req.driver.id);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ success: false, errors: errors.array() });
@@ -29,6 +34,10 @@ router.post('/', authMiddleware, [
     } = req.body;
 
     const locationTimestamp = timestamp ? new Date(timestamp) : new Date();
+
+    console.log(`📍 Updating location for driver ${req.driver.id}:`, {
+      latitude, longitude, accuracy, address
+    });
 
     // Update or insert current location
     await db.query(`
@@ -69,24 +78,28 @@ router.post('/', authMiddleware, [
       WHERE driver_id = ? AND end_time IS NULL
     `, [latitude, longitude, accuracy, address, req.driver.id]);
 
+    console.log(`✅ Location updated successfully for driver ${req.driver.id}`);
+
     res.json({
       success: true,
       message: 'Location updated successfully'
     });
 
   } catch (error) {
-    console.error('Error updating location:', error);
+    console.error('❌ Error updating location:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get current driver location
-router.get('/', authMiddleware, async (req, res) => {
+// Get current driver location - GET /location
+router.get('/location', authMiddleware, async (req, res) => {
   try {
+    console.log('📍 GET /location called by driver:', req.driver.id);
+    
     const [location] = await db.query(`
       SELECT * FROM driver_locations 
       WHERE driver_id = ?
-      ORDER BY recorded_at DESC 
+      ORDER BY timestamp DESC 
       LIMIT 1
     `, [req.driver.id]);
 
@@ -104,32 +117,32 @@ router.get('/', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching location:', error);
+    console.error('❌ Error fetching location:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get location history
-router.get('/history', authMiddleware, async (req, res) => {
+// Get location history - GET /location/history
+router.get('/location/history', authMiddleware, async (req, res) => {
   try {
+    console.log('📍 GET /location/history called by driver:', req.driver.id);
+    
     const { hours = 24, limit = 100 } = req.query;
     
     const [locations] = await db.query(`
-      SELECT lh.*, st.code as status_code
+      SELECT lh.*, 
+             COALESCE(
+               (SELECT st.code 
+                FROM log_entries le 
+                JOIN status_types st ON le.status_id = st.id 
+                WHERE le.driver_id = ? 
+                AND le.start_time <= lh.timestamp 
+                AND (le.end_time IS NULL OR le.end_time >= lh.timestamp)
+                ORDER BY le.start_time DESC 
+                LIMIT 1), 
+               'UNKNOWN'
+             ) as status_code
       FROM location_history lh
-      LEFT JOIN (
-        SELECT le.driver_id, le.start_time, le.end_time, st.code,
-               ROW_NUMBER() OVER (
-                 PARTITION BY le.driver_id 
-                 ORDER BY ABS(TIMESTAMPDIFF(SECOND, lh.timestamp, le.start_time))
-               ) as rn
-        FROM log_entries le
-        JOIN status_types st ON le.status_id = st.id
-        WHERE le.driver_id = ?
-      ) st ON lh.driver_id = st.driver_id 
-         AND lh.timestamp >= st.start_time 
-         AND (st.end_time IS NULL OR lh.timestamp <= st.end_time)
-         AND st.rn = 1
       WHERE lh.driver_id = ? 
         AND lh.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
       ORDER BY lh.timestamp DESC
@@ -142,28 +155,14 @@ router.get('/history', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching location history:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-// Admin route to get all drivers' latest locations
-router.get('/all', async (req, res) => {
-  try {
-    const [locations] = await db.query(`
-      SELECT dl.*, d.name as driver_name
-      FROM driver_locations dl
-      JOIN drivers d ON dl.driver_id = d.id
-      ORDER BY dl.timestamp DESC
-    `);
-
-    res.json({
-      success: true,
-      locations: locations || []
-    });
-  } catch (error) {
-    console.error('Error fetching all driver locations:', error);
+    console.error('❌ Error fetching location history:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 module.exports = router;
+
+console.log('📍 Location routes exported - Available endpoints:');
+console.log('  - POST /location (update driver location)');
+console.log('  - GET /location (get current driver location)');
+console.log('  - GET /location/history (get driver location history)');

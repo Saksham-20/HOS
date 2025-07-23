@@ -1,5 +1,5 @@
-// src/context/AppContext.js - Updated with location tracking
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+// src/context/AppContext.js - Fixed with memory leak prevention and status persistence
+import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import ApiService from '../services/api';
@@ -16,7 +16,7 @@ const initialState = {
   statusStartTime: new Date(),
   odometer: 0,
   location: '',
-  currentLocation: null, // GPS coordinates
+  currentLocation: null,
   isLocationTracking: false,
   hoursData: {
     drive: 0,
@@ -58,7 +58,14 @@ const appReducer = (state, action) => {
         error: null 
       };
     case 'LOGOUT':
-      return { ...initialState };
+      // Preserve status and related data across logout
+      return { 
+        ...initialState,
+        currentStatus: state.currentStatus,
+        statusStartTime: state.statusStartTime,
+        odometer: state.odometer,
+        location: state.location
+      };
     case 'SET_STATUS':
       return { 
         ...state, 
@@ -66,6 +73,14 @@ const appReducer = (state, action) => {
         statusStartTime: new Date(),
         location: action.payload.location,
         odometer: action.payload.odometer
+      };
+    case 'RESTORE_STATUS':
+      return {
+        ...state,
+        currentStatus: action.payload.status,
+        statusStartTime: action.payload.statusStartTime,
+        odometer: action.payload.odometer,
+        location: action.payload.location
       };
     case 'UPDATE_LOCATION':
       return {
@@ -130,18 +145,40 @@ const appReducer = (state, action) => {
 
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  
+  // Use refs to prevent memory leaks and stale closures
+  const timersRef = useRef({
+    timeUpdate: null,
+    dataRefresh: null,
+    statusPersist: null
+  });
+  const appStateRef = useRef();
+  const mountedRef = useRef(true);
 
-  // Load saved auth state on app start
+  // Load saved auth state and persistent data on app start
   useEffect(() => {
     checkAuthState();
+    loadPersistedData();
+
+    return () => {
+      mountedRef.current = false;
+      clearAllTimers();
+    };
   }, []);
 
-  // Update time every minute
+  // Update time every minute with cleanup
   useEffect(() => {
-    const timer = setInterval(() => {
-      dispatch({ type: 'UPDATE_TIME', payload: new Date() });
+    timersRef.current.timeUpdate = setInterval(() => {
+      if (mountedRef.current) {
+        dispatch({ type: 'UPDATE_TIME', payload: new Date() });
+      }
     }, 60000);
-    return () => clearInterval(timer);
+
+    return () => {
+      if (timersRef.current.timeUpdate) {
+        clearInterval(timersRef.current.timeUpdate);
+      }
+    };
   }, []);
 
   // Start/stop location tracking based on login state
@@ -149,22 +186,105 @@ export const AppProvider = ({ children }) => {
     if (state.isLoggedIn) {
       startLocationTracking();
       fetchCurrentData();
+      startPeriodicDataRefresh();
     } else {
       stopLocationTracking();
+      stopPeriodicDataRefresh();
     }
+
+    return () => {
+      stopLocationTracking();
+      stopPeriodicDataRefresh();
+    };
   }, [state.isLoggedIn]);
 
   // Handle app state changes for background location tracking
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
+      appStateRef.current = nextAppState;
+      
       if (state.isLoggedIn && state.isLocationTracking) {
         LocationService.setBackgroundMode(nextAppState === 'background');
+      }
+      
+      // Persist status when app goes to background
+      if (nextAppState === 'background') {
+        persistDriverStatus();
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
-  }, [state.isLoggedIn, state.isLocationTracking]);
+  }, [state.isLoggedIn, state.isLocationTracking, state.currentStatus]);
+
+  // Persist driver status periodically
+  useEffect(() => {
+    if (state.isLoggedIn) {
+      timersRef.current.statusPersist = setInterval(() => {
+        if (mountedRef.current) {
+          persistDriverStatus();
+        }
+      }, 30000); // Every 30 seconds
+
+      return () => {
+        if (timersRef.current.statusPersist) {
+          clearInterval(timersRef.current.statusPersist);
+        }
+      };
+    }
+  }, [state.isLoggedIn, state.currentStatus, state.statusStartTime, state.odometer, state.location]);
+
+  const clearAllTimers = () => {
+    Object.values(timersRef.current).forEach(timer => {
+      if (timer) clearInterval(timer);
+    });
+    timersRef.current = {
+      timeUpdate: null,
+      dataRefresh: null,
+      statusPersist: null
+    };
+  };
+
+  const persistDriverStatus = async () => {
+    try {
+      const statusData = {
+        currentStatus: state.currentStatus,
+        statusStartTime: state.statusStartTime.toISOString(),
+        odometer: state.odometer,
+        location: state.location,
+        driverId: state.driverInfo.id,
+        timestamp: new Date().toISOString()
+      };
+
+      await AsyncStorage.setItem('driverStatus', JSON.stringify(statusData));
+      console.log('✅ Driver status persisted');
+    } catch (error) {
+      console.error('❌ Failed to persist driver status:', error);
+    }
+  };
+
+  const loadPersistedData = async () => {
+    try {
+      const statusData = await AsyncStorage.getItem('driverStatus');
+      
+      if (statusData) {
+        const parsed = JSON.parse(statusData);
+        console.log('📱 Loading persisted driver status:', parsed);
+        
+        dispatch({
+          type: 'RESTORE_STATUS',
+          payload: {
+            status: parsed.currentStatus || 'OFF_DUTY',
+            statusStartTime: new Date(parsed.statusStartTime),
+            odometer: parsed.odometer || 0,
+            location: parsed.location || ''
+          }
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to load persisted data:', error);
+    }
+  };
 
   const checkAuthState = async () => {
     try {
@@ -181,6 +301,22 @@ export const AppProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Auth check failed:', error);
+    }
+  };
+
+  const startPeriodicDataRefresh = () => {
+    // Refresh data every 5 minutes when logged in
+    timersRef.current.dataRefresh = setInterval(() => {
+      if (mountedRef.current && state.isLoggedIn) {
+        fetchCurrentData();
+      }
+    }, 300000);
+  };
+
+  const stopPeriodicDataRefresh = () => {
+    if (timersRef.current.dataRefresh) {
+      clearInterval(timersRef.current.dataRefresh);
+      timersRef.current.dataRefresh = null;
     }
   };
 
@@ -202,6 +338,8 @@ export const AppProvider = ({ children }) => {
   };
 
   const fetchCurrentData = async () => {
+    if (!mountedRef.current) return;
+    
     try {
       // Get today's logs and summary
       const today = new Date().toISOString().split('T')[0];
@@ -211,6 +349,8 @@ export const AppProvider = ({ children }) => {
         ApiService.getViolationSummary(),
         ApiService.getCurrentLocation()
       ]);
+
+      if (!mountedRef.current) return;
 
       if (logsResponse.success) {
         dispatch({ type: 'SET_LOGS', payload: logsResponse.logs });
@@ -248,6 +388,10 @@ export const AppProvider = ({ children }) => {
       
       if (response.success) {
         dispatch({ type: 'LOGIN_SUCCESS', payload: response.driver });
+        
+        // Try to restore driver's previous status after login
+        await restoreDriverStatus(response.driver.id);
+        
         return { success: true };
       } else {
         dispatch({ type: 'SET_ERROR', payload: response.message });
@@ -258,6 +402,46 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: error.message };
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
+  const restoreDriverStatus = async (driverId) => {
+    try {
+      const statusData = await AsyncStorage.getItem('driverStatus');
+      
+      if (statusData) {
+        const parsed = JSON.parse(statusData);
+        
+        // Only restore if it's for the same driver and recent (within 24 hours)
+        if (parsed.driverId === driverId) {
+          const statusAge = new Date() - new Date(parsed.timestamp);
+          const twentyFourHours = 24 * 60 * 60 * 1000;
+          
+          if (statusAge < twentyFourHours) {
+            console.log('🔄 Restoring driver status from previous session');
+            
+            dispatch({
+              type: 'RESTORE_STATUS',
+              payload: {
+                status: parsed.currentStatus,
+                statusStartTime: new Date(parsed.statusStartTime),
+                odometer: parsed.odometer,
+                location: parsed.location
+              }
+            });
+            
+            return;
+          }
+        }
+      }
+      
+      // If no valid persisted status, fetch current status from server
+      console.log('📡 Fetching current status from server');
+      await fetchCurrentData();
+      
+    } catch (error) {
+      console.error('❌ Failed to restore driver status:', error);
+      await fetchCurrentData();
     }
   };
 
@@ -285,9 +469,13 @@ export const AppProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Persist current status before logout
+      await persistDriverStatus();
+      
       await ApiService.logout();
     } finally {
       stopLocationTracking();
+      clearAllTimers();
       dispatch({ type: 'LOGOUT' });
     }
   };
@@ -316,7 +504,7 @@ export const AppProvider = ({ children }) => {
         location: locationData,
         odometer: additionalInfo.odometer || state.odometer,
         notes: additionalInfo.notes,
-        ...coordinates // Include GPS coordinates
+        ...coordinates
       };
 
       const response = await ApiService.changeStatus(statusChangeData);
@@ -330,6 +518,9 @@ export const AppProvider = ({ children }) => {
             odometer: additionalInfo.odometer || state.odometer
           }
         });
+        
+        // Persist the new status immediately
+        setTimeout(persistDriverStatus, 100);
         
         // Refresh logs and hours
         await fetchCurrentData();
@@ -416,7 +607,7 @@ export const AppProvider = ({ children }) => {
   const fetchWeeklySummary = async () => {
     try {
       const response = await ApiService.getWeeklySummary();
-      if (response.success) {
+      if (response.success && mountedRef.current) {
         dispatch({ 
           type: 'SET_WEEKLY_SUMMARY', 
           payload: response.weekSummary 
@@ -430,7 +621,7 @@ export const AppProvider = ({ children }) => {
   const fetchCycleInfo = async () => {
     try {
       const response = await ApiService.getCycleInfo();
-      if (response.success) {
+      if (response.success && mountedRef.current) {
         dispatch({ 
           type: 'SET_CYCLE_INFO', 
           payload: response.cycleInfo 
@@ -458,7 +649,9 @@ export const AppProvider = ({ children }) => {
   const forceLocationUpdate = async () => {
     try {
       const location = await LocationService.getCurrentLocation();
-      dispatch({ type: 'UPDATE_LOCATION', payload: location });
+      if (mountedRef.current) {
+        dispatch({ type: 'UPDATE_LOCATION', payload: location });
+      }
       return { success: true, location };
     } catch (error) {
       console.error('Failed to get current location:', error);
@@ -483,7 +676,8 @@ export const AppProvider = ({ children }) => {
     getLocationHistory,
     forceLocationUpdate,
     startLocationTracking,
-    stopLocationTracking
+    stopLocationTracking,
+    persistDriverStatus
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

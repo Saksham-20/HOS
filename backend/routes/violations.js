@@ -1,7 +1,6 @@
-// routes/violations.js
 const express = require('express');
 const db = require('../config/database');
-const authMiddleware = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth'); // ✅ Fixed this line
 
 const router = express.Router();
 
