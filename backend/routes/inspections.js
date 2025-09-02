@@ -1,232 +1,172 @@
-// backend/routes/inspections.js - FIXED VERSION
+// routes/inspections.js
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
-const { authMiddleware } = require('../middleware/auth'); // FIXED: Destructured import
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-console.log('🔍 Inspections routes module loaded');
+// Get inspections
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const { limit = 50, offset = 0 } = req.query;
 
-// Create new inspection - POST /inspections
-router.post('/inspections', authMiddleware, [
-  body('inspection_type').isIn(['pre_trip', 'post_trip']).withMessage('Invalid inspection type'),
-  body('vehicle_id').isInt().withMessage('Valid vehicle ID required'),
-  body('odometer_reading').isInt({ min: 0 }).withMessage('Valid odometer reading required'),
-  body('defects').optional().isArray().withMessage('Defects must be an array'),
-  body('signature_data').optional().isString().withMessage('Signature data must be a string')
+    const [inspections] = await db.query(
+      `SELECT vi.*, t.unit_number as truck_number
+       FROM vehicle_inspections vi
+       LEFT JOIN trucks t ON vi.truck_id = t.id
+       WHERE vi.driver_id = ?
+       ORDER BY vi.inspection_date DESC
+       LIMIT ? OFFSET ?`,
+      [req.driver.id, parseInt(limit), parseInt(offset)]
+    );
+
+    res.json({ success: true, inspections });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Create inspection
+router.post('/', authMiddleware, [
+  body('inspectionType').isIn(['PRE_TRIP', 'POST_TRIP', 'ROADSIDE', 'ANNUAL']),
+  body('odometerReading').isInt({ min: 0 }),
+  body('location').notEmpty().trim()
 ], async (req, res) => {
   try {
-    console.log('🔍 POST /inspections called by driver:', req.driver.id);
-    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
     const {
-      inspection_type,
-      vehicle_id,
-      odometer_reading,
-      defects = [],
-      signature_data,
+      inspectionType,
+      odometerReading,
+      location,
+      brakes,
+      tires,
+      lights,
+      mirrors,
+      horn,
+      windshield,
+      emergencyEquipment,
+      fluidLevels,
+      defectsFound,
       notes
     } = req.body;
 
-    console.log(`🔍 Creating ${inspection_type} inspection for driver ${req.driver.id}`);
+    // Get current truck
+    const [assignments] = await db.query(
+      `SELECT truck_id FROM driver_truck_assignments 
+       WHERE driver_id = ? AND is_active = TRUE`,
+      [req.driver.id]
+    );
 
-    // Insert inspection record
-    const [result] = await db.query(`
-      INSERT INTO inspections (
-        driver_id, vehicle_id, inspection_type, odometer_reading,
-        signature_data, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, NOW())
-    `, [
-      req.driver.id, vehicle_id, inspection_type, odometer_reading,
-      signature_data, notes
-    ]);
-
-    const inspectionId = result.insertId;
-
-    // Insert defects if any
-    if (defects.length > 0) {
-      const defectValues = defects.map(defect => [
-        inspectionId,
-        defect.category,
-        defect.description,
-        defect.severity || 'minor',
-        defect.corrected || false
-      ]);
-
-      await db.query(`
-        INSERT INTO inspection_defects (
-          inspection_id, category, description, severity, corrected
-        ) VALUES ?
-      `, [defectValues]);
-    }
-
-    console.log(`✅ Inspection created successfully with ID: ${inspectionId}`);
-
-    res.json({
-      success: true,
-      message: 'Inspection created successfully',
-      inspection_id: inspectionId
-    });
-
-  } catch (error) {
-    console.error('❌ Error creating inspection:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Get driver's inspections - GET /inspections
-router.get('/inspections', authMiddleware, async (req, res) => {
-  try {
-    console.log('🔍 GET /inspections called by driver:', req.driver.id);
-    
-    const { limit = 20, offset = 0, type } = req.query;
-    
-    let whereClause = 'WHERE i.driver_id = ?';
-    let queryParams = [req.driver.id];
-    
-    if (type) {
-      whereClause += ' AND i.inspection_type = ?';
-      queryParams.push(type);
-    }
-
-    const [inspections] = await db.query(`
-      SELECT 
-        i.*,
-        v.vehicle_number,
-        v.make,
-        v.model,
-        v.year,
-        COUNT(id_defects.id) as defect_count
-      FROM inspections i
-      LEFT JOIN vehicles v ON i.vehicle_id = v.id
-      LEFT JOIN inspection_defects id_defects ON i.id = id_defects.inspection_id
-      ${whereClause}
-      GROUP BY i.id
-      ORDER BY i.created_at DESC
-      LIMIT ? OFFSET ?
-    `, [...queryParams, parseInt(limit), parseInt(offset)]);
-
-    res.json({
-      success: true,
-      inspections: inspections || []
-    });
-
-  } catch (error) {
-    console.error('❌ Error fetching inspections:', error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Get specific inspection details - GET /inspections/:id
-router.get('/inspections/:id', authMiddleware, async (req, res) => {
-  try {
-    const inspectionId = req.params.id;
-    console.log(`🔍 GET /inspections/${inspectionId} called by driver:`, req.driver.id);
-    
-    // Get inspection details
-    const [inspections] = await db.query(`
-      SELECT 
-        i.*,
-        v.vehicle_number,
-        v.make,
-        v.model,
-        v.year,
-        v.vin,
-        d.full_name as driver_name
-      FROM inspections i
-      LEFT JOIN vehicles v ON i.vehicle_id = v.id
-      LEFT JOIN drivers d ON i.driver_id = d.id
-      WHERE i.id = ? AND i.driver_id = ?
-    `, [inspectionId, req.driver.id]);
-
-    if (inspections.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Inspection not found'
+    if (assignments.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No active truck assignment' 
       });
     }
 
-    // Get defects for this inspection
-    const [defects] = await db.query(`
-      SELECT * FROM inspection_defects 
-      WHERE inspection_id = ?
-      ORDER BY severity DESC, created_at ASC
-    `, [inspectionId]);
+    const truckId = assignments[0].truck_id;
 
-    const inspection = inspections[0];
-    inspection.defects = defects || [];
+    // Determine if passed
+    const isPassed = brakes && tires && lights && mirrors && 
+                     horn && windshield && emergencyEquipment && fluidLevels;
 
-    res.json({
-      success: true,
-      inspection: inspection
+    const [result] = await db.query(
+      `INSERT INTO vehicle_inspections (
+        driver_id, truck_id, inspection_date, inspection_type,
+        odometer_reading, location, brakes_ok, tires_ok, lights_ok,
+        mirrors_ok, horn_ok, windshield_ok, emergency_equipment_ok,
+        fluid_levels_ok, defects_found, is_passed, notes
+      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.driver.id, truckId, inspectionType, odometerReading, location,
+        brakes, tires, lights, mirrors, horn, windshield,
+        emergencyEquipment, fluidLevels, defectsFound, isPassed, notes
+      ]
+    );
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Inspection recorded successfully',
+      inspectionId: result.insertId,
+      passed: isPassed
     });
-
   } catch (error) {
-    console.error('❌ Error fetching inspection details:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Update inspection - PUT /inspections/:id
-router.put('/inspections/:id', authMiddleware, [
-  body('signature_data').optional().isString(),
-  body('notes').optional().isString()
-], async (req, res) => {
+// Get roadside inspection data
+router.get('/roadside-data', authMiddleware, async (req, res) => {
   try {
-    const inspectionId = req.params.id;
-    console.log(`🔍 PUT /inspections/${inspectionId} called by driver:`, req.driver.id);
-    
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array() });
-    }
+    // Get driver info
+    const [driverInfo] = await db.query(
+      `SELECT 
+        d.*,
+        c.name as carrier_name,
+        c.dot_number,
+        c.address as carrier_address,
+        c.city as carrier_city,
+        c.state as carrier_state,
+        c.zip as carrier_zip
+       FROM drivers d
+       LEFT JOIN carriers c ON d.carrier_id = c.id
+       WHERE d.id = ?`,
+      [req.driver.id]
+    );
 
-    const { signature_data, notes } = req.body;
+    // Get current truck
+    const [truckInfo] = await db.query(
+      `SELECT t.* FROM driver_truck_assignments dta
+       JOIN trucks t ON dta.truck_id = t.id
+       WHERE dta.driver_id = ? AND dta.is_active = TRUE`,
+      [req.driver.id]
+    );
 
-    // Verify inspection belongs to driver
-    const [existing] = await db.query(`
-      SELECT id FROM inspections 
-      WHERE id = ? AND driver_id = ?
-    `, [inspectionId, req.driver.id]);
+    // Get current status
+    const [currentStatus] = await db.query(
+      `SELECT le.*, st.code as status_code, st.name as status_name
+       FROM log_entries le
+       JOIN status_types st ON le.status_id = st.id
+       WHERE le.driver_id = ? AND le.end_time IS NULL`,
+      [req.driver.id]
+    );
 
-    if (existing.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Inspection not found'
-      });
-    }
+    // Get today's logs
+    const [todayLogs] = await db.query(
+      `SELECT le.*, st.code as status_code, st.name as status_name
+       FROM log_entries le
+       JOIN status_types st ON le.status_id = st.id
+       WHERE le.driver_id = ? AND DATE(le.start_time) = CURDATE()
+       ORDER BY le.start_time ASC`,
+      [req.driver.id]
+    );
 
-    // Update inspection
-    await db.query(`
-      UPDATE inspections 
-      SET signature_data = COALESCE(?, signature_data),
-          notes = COALESCE(?, notes),
-          updated_at = NOW()
-      WHERE id = ?
-    `, [signature_data, notes, inspectionId]);
-
-    console.log(`✅ Inspection ${inspectionId} updated successfully`);
+    // Get daily summary
+    const [summary] = await db.query(
+      `SELECT * FROM daily_hours_view 
+       WHERE driver_id = ? AND log_date = CURDATE()`,
+      [req.driver.id]
+    );
 
     res.json({
       success: true,
-      message: 'Inspection updated successfully'
+      roadsideData: {
+        driver: driverInfo[0],
+        truck: truckInfo[0],
+        currentStatus: currentStatus[0],
+        todayLogs,
+        summary,
+        inspectionDate: new Date()
+      }
     });
-
   } catch (error) {
-    console.error('❌ Error updating inspection:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
 module.exports = router;
-
-console.log('🔍 Inspections routes exported - Available endpoints:');
-console.log('  - POST /inspections (create new inspection)');
-console.log('  - GET /inspections (get driver inspections)');
-console.log('  - GET /inspections/:id (get specific inspection)');
-console.log('  - PUT /inspections/:id (update inspection)');

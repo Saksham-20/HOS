@@ -1,15 +1,13 @@
-// backend/routes/drivers.js - Fixed to use destructured auth middleware import
+// routes/drivers.js
 const express = require('express');
 const db = require('../config/database');
-const { authMiddleware } = require('../middleware/auth'); // Fixed import
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get driver profile - REQUIRES AUTH
+// Get driver profile
 router.get('/profile', authMiddleware, async (req, res) => {
   try {
-    console.log('👤 Getting profile for driver:', req.driver.id);
-    
     const [driver] = await db.query(
       `SELECT 
         d.id, d.username, d.full_name, d.email,
@@ -31,19 +29,15 @@ router.get('/profile', authMiddleware, async (req, res) => {
       });
     }
 
-    console.log('✅ Profile retrieved for:', driver[0].username);
     res.json({ success: true, driver: driver[0] });
   } catch (error) {
-    console.error('❌ Error getting profile:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get weekly summary - REQUIRES AUTH
+// Get weekly summary
 router.get('/weekly-summary', authMiddleware, async (req, res) => {
   try {
-    console.log('📊 Getting weekly summary for driver:', req.driver.id);
-    
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
@@ -63,29 +57,23 @@ router.get('/weekly-summary', authMiddleware, async (req, res) => {
       [req.driver.id, startOfWeek]
     );
 
-    const summary = {
-      ...weeklyHours[0],
-      total_drive_hours: weeklyHours[0].total_drive_hours || 0,
-      total_duty_hours: weeklyHours[0].total_duty_hours || 0,
-      days_worked: weeklyHours[0].days_worked || 0,
-      weekStart: startOfWeek,
-      maxWeeklyHours: 70,
-      remainingHours: Math.max(0, 70 - (weeklyHours[0].total_duty_hours || 0))
-    };
-
-    console.log('✅ Weekly summary retrieved');
-    res.json({ success: true, weekSummary: summary });
+    res.json({ 
+      success: true, 
+      weekSummary: {
+        ...weeklyHours[0],
+        weekStart: startOfWeek,
+        maxWeeklyHours: 70,
+        remainingHours: Math.max(0, 70 - (weeklyHours[0].total_drive_hours + weeklyHours[0].total_duty_hours))
+      }
+    });
   } catch (error) {
-    console.error('❌ Error getting weekly summary:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get 8-day cycle info - REQUIRES AUTH
+// Get 8-day cycle info
 router.get('/cycle-info', authMiddleware, async (req, res) => {
   try {
-    console.log('🔄 Getting cycle info for driver:', req.driver.id);
-    
     // Get hours for last 8 days
     const eightDaysAgo = new Date();
     eightDaysAgo.setDate(eightDaysAgo.getDate() - 7);
@@ -121,23 +109,22 @@ router.get('/cycle-info', authMiddleware, async (req, res) => {
       [req.driver.id]
     );
 
-    const totalCycleHours = cycleHours.reduce((sum, day) => sum + (day.duty_hours || 0), 0);
+    const totalCycleHours = cycleHours.reduce((sum, day) => sum + day.duty_hours, 0);
 
-    const cycleInfo = {
-      currentDay: cycleHours.length,
-      totalHours: totalCycleHours,
-      maxCycleHours: 70,
-      remainingHours: Math.max(0, 70 - totalCycleHours),
-      last34HourReset: lastReset[0]?.last_reset_time || null,
-      dailyBreakdown: cycleHours
-    };
-
-    console.log('✅ Cycle info retrieved');
-    res.json({ success: true, cycleInfo });
+    res.json({ 
+      success: true, 
+      cycleInfo: {
+        currentDay: cycleHours.length,
+        totalHours: totalCycleHours,
+        maxCycleHours: 70,
+        remainingHours: Math.max(0, 70 - totalCycleHours),
+        last34HourReset: lastReset[0]?.last_reset_time || null,
+        dailyBreakdown: cycleHours
+      }
+    });
   } catch (error) {
-    console.error('❌ Error getting cycle info:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-module.exports = router;
+module.exports = router; 

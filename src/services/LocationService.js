@@ -1,4 +1,4 @@
-// src/services/LocationService.js - Fixed version with better error handling
+// src/services/locationService.js - Fixed version with better error handling
 import { PermissionsAndroid, Platform, Alert, Linking } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import ApiService from './api';
@@ -8,7 +8,7 @@ class LocationService {
     this.watchId = null;
     this.isTracking = false;
     this.lastKnownLocation = null;
-    this.updateInterval = 60000; // 60 seconds to reduce battery usage
+    this.updateInterval = 60000; // Increased to 60 seconds to reduce battery usage
     this.retryAttempts = 0;
     this.maxRetryAttempts = 3;
     
@@ -31,7 +31,7 @@ class LocationService {
     Geolocation.setRNConfiguration({
       skipPermissionRequests: false,
       authorizationLevel: 'whenInUse',
-      locationProvider: 'auto',
+      locationProvider: 'auto', // Use auto provider
     });
   }
 
@@ -40,6 +40,7 @@ class LocationService {
     
     if (Platform.OS === 'android') {
       try {
+        // Check current permission status first
         const currentPermission = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
         );
@@ -51,6 +52,7 @@ class LocationService {
           return true;
         }
 
+        // Request permissions one by one for better compatibility
         const fineLocationPermission = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           {
@@ -80,6 +82,7 @@ class LocationService {
       }
     }
     
+    // iOS permissions are handled automatically by the system
     return true;
   }
 
@@ -126,7 +129,7 @@ class LocationService {
           };
           
           this.lastKnownLocation = locationData;
-          this.retryAttempts = 0;
+          this.retryAttempts = 0; // Reset retry counter on success
           resolve(locationData);
         },
         (error) => {
@@ -143,14 +146,14 @@ class LocationService {
     let errorMessage = 'Location error: ';
     
     switch (error.code) {
-      case 1:
+      case 1: // PERMISSION_DENIED
         errorMessage += 'Permission denied. Please enable location access.';
         this.showPermissionSettingsAlert();
         break;
-      case 2:
+      case 2: // POSITION_UNAVAILABLE
         errorMessage += 'Position unavailable. Please check GPS settings.';
         break;
-      case 3:
+      case 3: // TIMEOUT
         errorMessage += 'Location request timed out. Will retry with lower accuracy.';
         this.tryFallbackLocation();
         break;
@@ -170,10 +173,11 @@ class LocationService {
     this.retryAttempts++;
     console.log(`🔄 Attempting fallback location (attempt ${this.retryAttempts}/${this.maxRetryAttempts})`);
 
+    // Try with less accuracy but more reliability
     const fallbackOptions = {
       enableHighAccuracy: false,
       timeout: 60000,
-      maximumAge: 300000,
+      maximumAge: 300000, // 5 minutes
       distanceFilter: 100,
     };
 
@@ -195,6 +199,7 @@ class LocationService {
       },
       (error) => {
         console.error('❌ Fallback location also failed:', error);
+        // Try again after a delay
         setTimeout(() => this.tryFallbackLocation(), 30000);
       },
       fallbackOptions
@@ -235,6 +240,7 @@ class LocationService {
     try {
       console.log('📡 Updating location to server...');
       
+      // Add address if not provided
       if (!locationData.address) {
         locationData.address = await this.reverseGeocode(
           locationData.latitude,
@@ -253,12 +259,17 @@ class LocationService {
       return response;
     } catch (error) {
       console.error('❌ Error updating location to server:', error);
+      
+      // Store location locally if server update fails
       this.storeLocationLocally(locationData);
+      
       return { success: false, error: error.message };
     }
   }
 
   storeLocationLocally(locationData) {
+    // In a real app, you might want to store failed updates in AsyncStorage
+    // and retry them later when connectivity is restored
     console.log('💾 Storing location locally for later retry');
   }
 
@@ -318,7 +329,7 @@ class LocationService {
             this.stopLocationTracking();
             this.startLocationTracking();
           }
-        }, 30000);
+        }, 30000); // Wait 30 seconds before retrying
       },
       this.highAccuracyOptions
     );
