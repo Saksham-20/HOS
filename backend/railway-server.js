@@ -1,24 +1,15 @@
-// Railway-optimized server configuration
+// Simplified server for Render.com deployment without database
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-
-// Import all the route modules
-const authRoutes = require('./routes/auth');
-const driverRoutes = require('./routes/drivers');
-const logRoutes = require('./routes/logs');
-const inspectionRoutes = require('./routes/inspections');
-const violationRoutes = require('./routes/violations');
-const adminRoutes = require('./routes/admin');
-const locationRoutes = require('./routes/location');
 
 const app = express();
 
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: true, // Allow all origins for Railway deployment
+  origin: true, // Allow all origins for Render deployment
   credentials: true
 }));
 
@@ -29,31 +20,166 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Routes - Mount all API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/drivers', driverRoutes);
-app.use('/api/drivers', locationRoutes); // Mount location routes under /api/drivers
-app.use('/api/logs', logRoutes);
-app.use('/api/inspections', inspectionRoutes);
-app.use('/api/violations', violationRoutes);
-app.use('/api/admin', adminRoutes);
+// Mock data for testing
+const mockDrivers = [
+  {
+    id: 1,
+    username: 'driver1',
+    fullName: 'John Doe',
+    licenseNumber: 'D123456789',
+    licenseState: 'CA',
+    carrierName: 'Test Carrier',
+    truckNumber: 'TRUCK001',
+    email: 'john@example.com'
+  }
+];
+
+// Auth routes
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Username and password are required'
+    });
+  }
+  
+  // Simple mock authentication
+  if (username === 'driver1' && password === 'password123') {
+    const token = 'mock-jwt-token-' + Date.now();
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token: token,
+      user: {
+        id: 1,
+        username: 'driver1',
+        fullName: 'John Doe',
+        licenseNumber: 'D123456789',
+        licenseState: 'CA',
+        carrierName: 'Test Carrier',
+        truckNumber: 'TRUCK001'
+      }
+    });
+  } else {
+    res.status(401).json({
+      success: false,
+      message: 'Invalid credentials'
+    });
+  }
+});
+
+app.post('/api/auth/register', (req, res) => {
+  const { username, password, fullName, licenseNumber, licenseState, carrierName, truckNumber } = req.body;
+  
+  if (!username || !password || !fullName || !licenseNumber || !licenseState || !carrierName || !truckNumber) {
+    return res.status(400).json({
+      success: false,
+      message: 'All fields are required'
+    });
+  }
+  
+  // Mock registration
+  const newDriver = {
+    id: Date.now(),
+    username,
+    fullName,
+    licenseNumber,
+    licenseState,
+    carrierName,
+    truckNumber
+  };
+  
+  res.status(201).json({
+    success: true,
+    message: 'Registration successful',
+    user: newDriver
+  });
+});
+
+// Driver routes
+app.get('/api/drivers/profile', (req, res) => {
+  res.json({
+    success: true,
+    driver: mockDrivers[0]
+  });
+});
+
+app.get('/api/drivers/weekly-summary', (req, res) => {
+  res.json({
+    success: true,
+    summary: {
+      totalHours: 40,
+      drivingHours: 30,
+      onDutyHours: 10,
+      remainingHours: 30
+    }
+  });
+});
+
+// Logs routes
+app.get('/api/logs', (req, res) => {
+  res.json({
+    success: true,
+    logs: [
+      {
+        id: 1,
+        date: new Date().toISOString(),
+        status: 'driving',
+        location: 'Los Angeles, CA',
+        hours: 8
+      }
+    ]
+  });
+});
+
+app.post('/api/logs/status', (req, res) => {
+  const { status } = req.body;
+  res.json({
+    success: true,
+    message: `Status changed to ${status}`,
+    log: {
+      id: Date.now(),
+      status,
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
+// Location routes
+app.post('/api/drivers/location', (req, res) => {
+  const { latitude, longitude } = req.body;
+  res.json({
+    success: true,
+    message: 'Location updated',
+    location: {
+      latitude,
+      longitude,
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
+app.get('/api/drivers/location', (req, res) => {
+  res.json({
+    success: true,
+    location: {
+      latitude: 34.0522,
+      longitude: -118.2437,
+      timestamp: new Date().toISOString()
+    }
+  });
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
-    message: 'HOS Backend API is running on Railway',
+    message: 'HOS Backend API is running on Render - SIMPLIFIED SERVER',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
-  });
-});
-
-// Basic API endpoints for testing
-app.get('/api/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'API is working!',
-    timestamp: new Date().toISOString()
+    environment: process.env.NODE_ENV || 'production',
+    server: 'railway-server.js (SIMPLIFIED)'
   });
 });
 
@@ -63,94 +189,20 @@ app.get('/api/docs', (req, res) => {
     success: true,
     endpoints: {
       auth: {
-        'POST /api/auth/login': 'Driver login',
-        'POST /api/auth/register': 'Driver registration',
-        'POST /api/auth/logout': 'Logout'
+        'POST /api/auth/login': 'Driver login (use driver1/password123)',
+        'POST /api/auth/register': 'Driver registration'
       },
       drivers: {
         'GET /api/drivers/profile': 'Get driver profile',
         'GET /api/drivers/weekly-summary': 'Get weekly hours summary',
-        'GET /api/drivers/cycle-info': 'Get 8-day cycle info',
         'POST /api/drivers/location': 'Update driver location',
-        'GET /api/drivers/location': 'Get current driver location',
-        'GET /api/drivers/location/history': 'Get driver location history'
+        'GET /api/drivers/location': 'Get current driver location'
       },
       logs: {
         'GET /api/logs': 'Get driver logs',
-        'POST /api/logs/status': 'Change driver status',
-        'PUT /api/logs/:id': 'Update log entry',
-        'POST /api/logs/:id/submit': 'Submit log entry',
-        'GET /api/logs/summary/:date': 'Get daily summary'
-      },
-      inspections: {
-        'GET /api/inspections': 'Get inspections',
-        'POST /api/inspections': 'Create inspection',
-        'GET /api/inspections/roadside-data': 'Get roadside inspection data'
-      },
-      violations: {
-        'GET /api/violations': 'Get violations',
-        'GET /api/violations/summary': 'Get violation summary',
-        'PUT /api/violations/:id/resolve': 'Resolve violation'
-      },
-      admin: {
-        'POST /api/admin/login': 'Admin login',
-        'GET /api/admin/drivers/active': 'Get all active drivers with real locations',
-        'GET /api/admin/drivers/live-locations': 'Get live driver locations for map',
-        'GET /api/admin/fleet/stats': 'Get fleet statistics',
-        'GET /api/admin/drivers/:id': 'Get driver details',
-        'GET /api/admin/drivers/:id/location-history': 'Get driver location history',
-        'POST /api/admin/drivers/:id/message': 'Send message to driver',
-        'GET /api/admin/violations': 'Get all fleet violations'
+        'POST /api/logs/status': 'Change driver status'
       }
     }
-  });
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error stack:', err.stack);
-  
-  // Database connection errors
-  if (err.code === 'ECONNREFUSED') {
-    return res.status(503).json({
-      success: false,
-      message: 'Database connection failed',
-      error: process.env.NODE_ENV === 'development' ? err.message : 'Service temporarily unavailable'
-    });
-  }
-
-  // JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid token'
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Token expired'
-    });
-  }
-
-  // Validation errors
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: Object.values(err.errors).map(e => e.message)
-    });
-  }
-
-  // Default error response
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { 
-      stack: err.stack,
-      details: err 
-    })
   });
 });
 
@@ -162,12 +214,12 @@ app.use('*', (req, res) => {
     availableRoutes: [
       '/api/health',
       '/api/docs',
-      '/api/auth/*',
-      '/api/drivers/*',
-      '/api/logs/*',
-      '/api/inspections/*',
-      '/api/violations/*',
-      '/api/admin/*'
+      '/api/auth/login',
+      '/api/auth/register',
+      '/api/drivers/profile',
+      '/api/drivers/weekly-summary',
+      '/api/drivers/location',
+      '/api/logs'
     ]
   });
 });
@@ -175,8 +227,10 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 HOS Backend running on Railway - Port ${PORT}`);
+  console.log(`🚀 HOS Backend running on Render - Port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'production'}`);
+  console.log(`📖 API Documentation: http://localhost:${PORT}/api/docs`);
+  console.log(`✅ SIMPLIFIED SERVER - NO DATABASE REQUIRED`);
 });
 
 module.exports = app;
