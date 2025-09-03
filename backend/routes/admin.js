@@ -247,12 +247,21 @@ router.get('/fleet/stats', adminJwtAuth, async (req, res) => {
          WHERE is_resolved = FALSE) as violations
     `);
 
-    const fleetStats = stats[0] || {
+    const rawStats = stats[0] || {
       total_drivers: 0,
       active_drivers: 0,
       on_duty_drivers: 0,
       driving_drivers: 0,
       violations: 0
+    };
+
+    // Convert snake_case to camelCase for frontend compatibility
+    const fleetStats = {
+      totalDrivers: rawStats.total_drivers,
+      activeDrivers: rawStats.active_drivers,
+      onDutyDrivers: rawStats.on_duty_drivers,
+      drivingDrivers: rawStats.driving_drivers,
+      violations: rawStats.violations
     };
 
     console.log('📊 Fleet stats:', fleetStats);
