@@ -18,7 +18,7 @@ import AdminApiService from '../services/adminApi';
 
 const { width, height } = Dimensions.get('window');
 
-const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
+const LiveMap = ({ onDriverSelect, refreshInterval = 30000, drivers: externalDrivers }) => {
   const { theme } = useTheme();
   const mapRef = useRef(null);
   const [drivers, setDrivers] = useState([]);
@@ -33,6 +33,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
     latitudeDelta: 15,
     longitudeDelta: 15,
   });
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   useEffect(() => {
     // Request permissions on mount
@@ -40,16 +41,38 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
       requestLocationPermission();
     }
     
-    // Initial load
-    loadDriverLocations();
-
-    // Set up real-time updates
-    const interval = setInterval(() => {
+    // If external drivers are provided, use them; otherwise fetch our own
+    if (externalDrivers) {
+      setDrivers(externalDrivers);
+      setLoading(false);
+    } else {
+      // Initial load
       loadDriverLocations();
-    }, refreshInterval);
 
-    return () => clearInterval(interval);
-  }, [refreshInterval]);
+      // Set up real-time updates
+      const interval = setInterval(() => {
+        loadDriverLocations();
+      }, refreshInterval);
+
+      return () => clearInterval(interval);
+    }
+  }, [refreshInterval, externalDrivers]);
+
+  // Update drivers when external drivers change
+  useEffect(() => {
+    if (externalDrivers) {
+      // Filter out any invalid drivers
+      const validDrivers = externalDrivers.filter(driver => 
+        driver && 
+        driver.id && 
+        driver.latitude && 
+        driver.longitude &&
+        !isNaN(parseFloat(driver.latitude)) && 
+        !isNaN(parseFloat(driver.longitude))
+      );
+      setDrivers(validDrivers);
+    }
+  }, [externalDrivers]);
 
   const requestLocationPermission = async () => {
     try {
@@ -85,8 +108,8 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
         setDrivers(driversWithLocation);
         setLastUpdate(new Date());
 
-        // Auto-fit map to show all drivers if we have data
-        if (driversWithLocation.length > 0 && mapRef.current) {
+        // Only auto-fit map on initial load, not on every update
+        if (driversWithLocation.length > 0 && mapRef.current && isInitialLoad) {
           const coordinates = driversWithLocation.map(driver => ({
             latitude: parseFloat(driver.latitude),
             longitude: parseFloat(driver.longitude),
@@ -97,6 +120,9 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
             edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
             animated: true,
           });
+          
+          // Mark initial load as complete
+          setIsInitialLoad(false);
         }
       } else {
         console.warn('No live driver location data available');
@@ -157,6 +183,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
   };
 
   const getMarkerColor = (status) => {
+    if (!status) return '#ef4444';
     switch (status) {
       case 'DRIVING': return '#10b981';
       case 'ON_DUTY': return '#f59e0b';
@@ -167,6 +194,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
   };
 
   const getMarkerIcon = (status) => {
+    if (!status) return 'help';
     switch (status) {
       case 'DRIVING': return 'local-shipping';
       case 'ON_DUTY': return 'work';
@@ -230,7 +258,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={mapRegion}
-        onMapReady={() => console.log('Live map is ready')}
+        onMapReady={() => {}}
         onError={(e) => {
           console.error('Map error:', e.nativeEvent);
           setMapError(e.nativeEvent.error || 'Map loading failed');
@@ -238,6 +266,9 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
       >
         {/* Driver markers with real location data */}
         {drivers.map((driver) => {
+          // Ensure driver object exists and has required properties
+          if (!driver || !driver.id) return null;
+          
           const lat = parseFloat(driver.latitude);
           const lng = parseFloat(driver.longitude);
           
@@ -247,25 +278,31 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
             (driver.last_location_update && 
              (new Date() - new Date(driver.last_location_update)) < 5 * 60 * 1000);
 
+          // Ensure all text values are strings
+          const driverName = String(driver.name || driver.full_name || 'Unknown Driver');
+          const truckNumber = String(driver.truck_number || 'N/A');
+          const currentStatus = String(driver.current_status || 'Unknown');
+          const lastUpdate = formatLastUpdate(driver.last_location_update);
+
           return (
             <Marker
               key={`driver-${driver.id}`}
               coordinate={{ latitude: lat, longitude: lng }}
-              title={driver.name || driver.full_name}
-              description={`${driver.truck_number} | ${driver.current_status} | ${formatLastUpdate(driver.last_location_update)}`}
+              title={driverName}
+              description={`${truckNumber} | ${currentStatus} | ${lastUpdate}`}
               onPress={() => handleDriverPress(driver)}
             >
               <View style={styles.markerContainer}>
                 <View style={[
                   styles.marker,
                   { 
-                    backgroundColor: getMarkerColor(driver.current_status),
+                    backgroundColor: getMarkerColor(driver.current_status || 'UNKNOWN'),
                     borderColor: isOnline ? '#ffffff' : '#dc2626',
                     borderWidth: 3
                   }
                 ]}>
                   <Icon 
-                    name={getMarkerIcon(driver.current_status)} 
+                    name={getMarkerIcon(driver.current_status || 'UNKNOWN')} 
                     size={20} 
                     color="#ffffff" 
                   />
@@ -276,7 +313,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
                   ]} />
                 </View>
                 <Text style={styles.markerLabel}>
-                  {driver.truck_number || 'N/A'}
+                  {truckNumber}
                 </Text>
               </View>
             </Marker>
@@ -318,17 +355,17 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000 }) => {
         <View style={[styles.driverPanel, { backgroundColor: theme.card }]}>
           <View style={styles.driverPanelHeader}>
             <Text style={[styles.driverName, { color: theme.text }]}>
-              {selectedDriver.name || selectedDriver.full_name}
+              {selectedDriver.name || selectedDriver.full_name || 'Unknown Driver'}
             </Text>
             <TouchableOpacity onPress={() => setSelectedDriver(null)}>
               <Icon name="close" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
           <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
-            Truck: {selectedDriver.truck_number}
+            Truck: {selectedDriver.truck_number || 'N/A'}
           </Text>
           <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
-            Status: {selectedDriver.current_status?.replace('_', ' ')}
+            Status: {selectedDriver.current_status ? selectedDriver.current_status.replace('_', ' ') : 'Unknown'}
           </Text>
           <Text style={[styles.driverDetail, { color: theme.textSecondary }]}>
             Location: {selectedDriver.location || 'Unknown'}
