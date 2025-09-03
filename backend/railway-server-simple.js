@@ -176,9 +176,10 @@ app.get('/api/drivers/location', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
-    message: 'HOS Backend API is running on Render',
+    message: 'HOS Backend API is running on Render - SIMPLIFIED SERVER',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
+    environment: process.env.NODE_ENV || 'production',
+    server: 'railway-server-simple.js'
   });
 });
 
