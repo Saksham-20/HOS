@@ -1,7 +1,10 @@
 // src/services/api.js - Fixed with correct endpoint structure
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.1.22:3000/api'; // Change to your server URL
+// Production API URL - Update this to your deployed backend URL
+const API_BASE_URL = __DEV__ 
+  ? 'http://192.168.29.161:3000/api' // Development URL - Your current IP
+  : 'https://your-backend-domain.com/api'; // Production URL - UPDATE THIS
 
 class ApiService {
   constructor() {
