@@ -5,6 +5,14 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
+// SECURITY: Check for required environment variables
+if (!process.env.JWT_SECRET) {
+  console.error('❌ CRITICAL: JWT_SECRET environment variable is not set!');
+  console.error('   Please set JWT_SECRET in your .env file');
+  console.error('   Example: JWT_SECRET=your-super-secret-key-here');
+  process.exit(1);
+}
+
 const authRoutes = require('./routes/auth');
 const driverRoutes = require('./routes/drivers');
 const logRoutes = require('./routes/logs');
@@ -18,18 +26,56 @@ const app = express();
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://192.168.1.30:3000', 'exp://192.168.1.30:19000'],
+  origin: ['http://localhost:3000', 'http://192.168.1.22:3000', 'exp://192.168.1.22:19000'],
   credentials: true
 }));
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Body parsing with size limits for security
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Basic rate limiting for security (in production, use redis-based rate limiting)
+const requestCounts = new Map();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+const MAX_REQUESTS = 1000; // requests per window
+
+app.use((req, res, next) => {
+  const clientIP = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  // Clean old entries
+  for (const [ip, data] of requestCounts.entries()) {
+    if (now - data.timestamp > RATE_LIMIT_WINDOW) {
+      requestCounts.delete(ip);
+    }
+  }
+  
+  // Check rate limit
+  const clientData = requestCounts.get(clientIP) || { count: 0, timestamp: now };
+  if (now - clientData.timestamp > RATE_LIMIT_WINDOW) {
+    clientData.count = 0;
+    clientData.timestamp = now;
+  }
+  
+  clientData.count++;
+  requestCounts.set(clientIP, clientData);
+  
+  if (clientData.count > MAX_REQUESTS) {
+    return res.status(429).json({
+      success: false,
+      message: 'Too many requests, please try again later',
+      retryAfter: Math.ceil((RATE_LIMIT_WINDOW - (now - clientData.timestamp)) / 1000)
+    });
+  }
+  
+  next();
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
-app.use('/api/drivers/location', locationRoutes);
- // Mount location routes under /api/drivers
+app.use('/api/drivers', locationRoutes); // Mount location routes under /api/drivers
 app.use('/api/logs', logRoutes);
 app.use('/api/inspections', inspectionRoutes);
 app.use('/api/violations', violationRoutes);

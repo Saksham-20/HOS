@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useApp } from '../context/AppContext';
@@ -8,15 +8,33 @@ const StatusCard = () => {
   const { state } = useApp();
   const { theme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const mountedRef = useRef(true);
+  const timerRef = useRef(null);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
   }, []);
 
-  const getStatusColor = (status) => {
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      if (mountedRef.current) {
+        setCurrentTime(new Date());
+      }
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const getStatusColor = useCallback((status) => {
     switch (status) {
       case 'DRIVING': return theme.driving;
       case 'ON_DUTY': return theme.onDuty;
@@ -24,9 +42,9 @@ const StatusCard = () => {
       case 'OFF_DUTY': return theme.offDuty;
       default: return theme.offDuty;
     }
-  };
+  }, [theme]);
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = useCallback((status) => {
     switch (status) {
       case 'DRIVING': return 'local-shipping';
       case 'ON_DUTY': return 'work';
@@ -34,9 +52,9 @@ const StatusCard = () => {
       case 'OFF_DUTY': return 'home';
       default: return 'help';
     }
-  };
+  }, []);
 
-  const formatDuration = () => {
+  const formatDuration = useCallback(() => {
     if (!state.statusStartTime) return '0m';
     
     const diff = currentTime - new Date(state.statusStartTime);
@@ -47,7 +65,7 @@ const StatusCard = () => {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}m`;
-  };
+  }, [currentTime, state.statusStartTime]);
 
   return (
     <View style={[styles.container, { 

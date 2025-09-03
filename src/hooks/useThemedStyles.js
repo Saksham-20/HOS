@@ -8,5 +8,5 @@ export const useThemedStyles = (styleFactory) => {
   
   return useMemo(() => {
     return StyleSheet.create(styleFactory(theme));
-  }, [theme, styleFactory]);
+  }, [theme]); // Removed styleFactory dependency to prevent re-renders
 };

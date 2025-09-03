@@ -2,7 +2,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
-const authMiddleware = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -10,6 +10,8 @@ const router = express.Router();
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { date, limit = 50, offset = 0 } = req.query;
+    
+    console.log(`📋 Getting logs for driver ${req.driver.id}, date: ${date}, limit: ${limit}`);
     
     let query = `
       SELECT 
@@ -33,10 +35,16 @@ router.get('/', authMiddleware, async (req, res) => {
     query += ' ORDER BY le.start_time DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
     
+    console.log('📋 Executing query:', query);
+    console.log('📋 With params:', params);
+    
     const [logs] = await db.query(query, params);
+    
+    console.log(`📋 Found ${logs.length} log entries`);
     
     res.json({ success: true, logs });
   } catch (error) {
+    console.error('❌ Error fetching logs:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -71,10 +79,37 @@ router.post('/status', authMiddleware, [
 
     const truckId = assignments[0].truck_id;
 
-    // Call stored procedure to change status
+    // End current status if exists
     await db.query(
-      'CALL change_driver_status(?, ?, ?, ?, ?, ?)',
-      [req.driver.id, truckId, status, location, odometer, notes || null]
+      'UPDATE log_entries SET end_time = NOW() WHERE driver_id = ? AND end_time IS NULL',
+      [req.driver.id]
+    );
+
+    // Get status type ID
+    const [statusTypes] = await db.query(
+      'SELECT id FROM status_types WHERE code = ?',
+      [status]
+    );
+
+    if (statusTypes.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid status type' 
+      });
+    }
+
+    const statusId = statusTypes[0].id;
+
+    // Create new log entry
+    await db.query(
+      `INSERT INTO log_entries (
+        driver_id, truck_id, status_id, start_time, 
+        location, odometer_start, notes, latitude, longitude, accuracy
+      ) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?)`,
+      [
+        req.driver.id, truckId, statusId, location, odometer, 
+        notes || null, req.body.latitude || null, req.body.longitude || null, req.body.accuracy || null
+      ]
     );
 
     // Get updated status

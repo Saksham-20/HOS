@@ -57,7 +57,7 @@ const HoursCard = () => {
     } catch (error) {
       console.error('Error fetching hours data:', error);
     }
-  }, [selectedView, fetchWeeklySummary, fetchCycleInfo]);
+  }, [selectedView]); // Removed function dependencies to prevent infinite loop
 
   // Fetch data based on selected view
   useEffect(() => {
@@ -312,124 +312,7 @@ const HoursCard = () => {
   );
 };
 
-// Enhanced StatusCard with memory leak fixes
-const StatusCard = () => {
-  const { state } = useApp();
-  const { theme } = useTheme();
-  const [currentTime, setCurrentTime] = useState(new Date());
-  
-  // Use refs to prevent memory leaks
-  const mountedRef = useRef(true);
-  const timerRef = useRef(null);
 
-  useEffect(() => {
-    // Cleanup function
-    return () => {
-      mountedRef.current = false;
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      if (mountedRef.current) {
-        setCurrentTime(new Date());
-      }
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
-
-  const getStatusColor = useCallback((status) => {
-    switch (status) {
-      case 'DRIVING': return theme.driving;
-      case 'ON_DUTY': return theme.onDuty;
-      case 'SLEEPER': return theme.sleeper;
-      case 'OFF_DUTY': return theme.offDuty;
-      default: return theme.offDuty;
-    }
-  }, [theme]);
-
-  const getStatusIcon = useCallback((status) => {
-    switch (status) {
-      case 'DRIVING': return 'local-shipping';
-      case 'ON_DUTY': return 'work';
-      case 'SLEEPER': return 'hotel';
-      case 'OFF_DUTY': return 'home';
-      default: return 'help';
-    }
-  }, []);
-
-  const formatDuration = useCallback(() => {
-    if (!state.statusStartTime) return '0m';
-    
-    const diff = currentTime - new Date(state.statusStartTime);
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  }, [currentTime, state.statusStartTime]);
-
-  return (
-    <View style={[styles.container, { 
-      backgroundColor: theme.card,
-      shadowColor: theme.shadowColor,
-      shadowOpacity: theme.shadowOpacity,
-    }]}>
-      <View style={[styles.header, { borderBottomColor: theme.borderLight }]}>
-        <Text style={[styles.title, { color: theme.text }]}>Current Status</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(state.currentStatus) }]}>
-          <Icon name={getStatusIcon(state.currentStatus)} size={16} color="#ffffff" />
-          <Text style={styles.statusText}>{state.currentStatus.replace('_', ' ')}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.content}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoItem}>
-            <Icon name="access-time" size={20} color={theme.textSecondary} />
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Time</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>
-              {currentTime.toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: true 
-              })}
-            </Text>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Icon name="timer" size={20} color={theme.textSecondary} />
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Duration</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{formatDuration()}</Text>
-          </View>
-          
-          <View style={styles.infoItem}>
-            <Icon name="speed" size={20} color={theme.textSecondary} />
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Odometer</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{state.odometer || 0} mi</Text>
-          </View>
-        </View>
-        
-        <View style={[styles.locationSection, { backgroundColor: theme.background }]}>
-          <Icon name="location-on" size={20} color={theme.textSecondary} />
-          <Text style={[styles.locationText, { color: theme.text }]}>
-            {state.location || 'No location set'}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-};
 
 const createStyles = (theme) => ({
   container: {
@@ -593,4 +476,3 @@ const createStyles = (theme) => ({
 });
 
 export default HoursCard;
-export { StatusCard };

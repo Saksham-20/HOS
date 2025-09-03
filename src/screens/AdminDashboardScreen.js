@@ -533,7 +533,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                 <View style={styles.driverDetailItem}>
                   <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Odometer</Text>
                   <Text style={[styles.detailValue, { color: theme.text }]}>
-                    {selectedDriver.odometer || 0} miles
+                    {selectedDriver.odometer || 0} mi
                   </Text>
                 </View>
                 <View style={styles.driverDetailItem}>

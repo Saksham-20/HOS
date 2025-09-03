@@ -5,19 +5,103 @@ const db = require('../config/database');
 
 const router = express.Router();
 
-// Simple admin authentication middleware
-const adminAuth = (req, res, next) => {
+// Simple admin authentication middleware for login (POST requests)
+const adminLoginAuth = (req, res, next) => {
   const { username, password } = req.body;
-  if (username === 'admin' && password === 'admin123') {
+  
+  // Use environment variables for admin credentials
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  
+  if (username === adminUsername && password === adminPassword) {
     req.isAdmin = true;
     next();
   } else {
+    // Log failed login attempts for security monitoring
+    console.warn(`❌ Failed admin login attempt from IP: ${req.ip || req.connection.remoteAddress} - Username: ${username}`);
     res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 };
 
+// JWT-based admin authentication middleware for protected routes
+const adminJwtAuth = (req, res, next) => {
+  try {
+    const authHeader = req.header('Authorization');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Access denied. No valid token provided.',
+        code: 'NO_TOKEN'
+      });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Access denied. Token is empty.',
+        code: 'EMPTY_TOKEN'
+      });
+    }
+
+    // Verify JWT token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      console.error('JWT verification failed:', jwtError.message);
+      
+      if (jwtError.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Token has expired. Please login again.',
+          code: 'TOKEN_EXPIRED'
+        });
+      } else if (jwtError.name === 'JsonWebTokenError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid token format.',
+          code: 'INVALID_TOKEN'
+        });
+      } else {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Token verification failed.',
+          code: 'TOKEN_VERIFICATION_FAILED'
+        });
+      }
+    }
+
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Admin access required.',
+        code: 'INSUFFICIENT_PRIVILEGES'
+      });
+    }
+
+    req.admin = {
+      username: decoded.username,
+      role: decoded.role
+    };
+    
+    console.log(`✅ Admin auth successful for: ${decoded.username}`);
+    next();
+
+  } catch (error) {
+    console.error('❌ Admin authentication error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Admin authentication failed.',
+      code: 'ADMIN_AUTH_ERROR'
+    });
+  }
+};
+
 // Admin login
-router.post('/login', adminAuth, (req, res) => {
+router.post('/login', adminLoginAuth, (req, res) => {
   const token = jwt.sign(
     { role: 'admin', username: 'admin' },
     process.env.JWT_SECRET,
@@ -32,7 +116,7 @@ router.post('/login', adminAuth, (req, res) => {
 });
 
 // Get all active drivers with their REAL current status and location
-router.get('/drivers/active', async (req, res) => {
+router.get('/drivers/active', adminJwtAuth, async (req, res) => {
   try {
     const [drivers] = await db.query(`
       SELECT 
@@ -128,8 +212,10 @@ router.get('/drivers/active', async (req, res) => {
 });
 
 // Get fleet statistics with real data
-router.get('/fleet/stats', async (req, res) => {
+router.get('/fleet/stats', adminJwtAuth, async (req, res) => {
   try {
+    console.log('📊 Fetching fleet statistics...');
+    
     const [stats] = await db.query(`
       SELECT 
         (SELECT COUNT(*) FROM drivers WHERE is_active = TRUE) as total_drivers,
@@ -138,7 +224,7 @@ router.get('/fleet/stats', async (req, res) => {
          FROM drivers d
          JOIN driver_locations dl ON d.id = dl.driver_id
          WHERE d.is_active = TRUE 
-         AND dl.timestamp >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)) as active_drivers,
+         AND dl.timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR)) as active_drivers,
         
         (SELECT COUNT(DISTINCT d.id)
          FROM drivers d
@@ -161,15 +247,19 @@ router.get('/fleet/stats', async (req, res) => {
          WHERE is_resolved = FALSE) as violations
     `);
 
+    const fleetStats = stats[0] || {
+      total_drivers: 0,
+      active_drivers: 0,
+      on_duty_drivers: 0,
+      driving_drivers: 0,
+      violations: 0
+    };
+
+    console.log('📊 Fleet stats:', fleetStats);
+
     res.json({ 
       success: true, 
-      stats: stats[0] || {
-        total_drivers: 0,
-        active_drivers: 0,
-        on_duty_drivers: 0,
-        driving_drivers: 0,
-        violations: 0
-      }
+      stats: fleetStats
     });
   } catch (error) {
     console.error('Error fetching fleet stats:', error);
@@ -180,8 +270,71 @@ router.get('/fleet/stats', async (req, res) => {
   }
 });
 
+// Get real-time locations of all active drivers for live map
+router.get('/drivers/live-locations', adminJwtAuth, async (req, res) => {
+  try {
+    console.log('📍 Fetching live driver locations...');
+    console.log('📍 Request headers:', req.headers);
+    console.log('📍 Admin user:', req.admin);
+    
+    const [liveLocations] = await db.query(`
+      SELECT 
+        d.id,
+        d.full_name as name,
+        d.username,
+        t.unit_number as truck_number,
+        dl.latitude,
+        dl.longitude,
+        dl.accuracy,
+        dl.heading,
+        dl.speed,
+        dl.address as location,
+        dl.timestamp as last_update,
+        
+        -- Current status
+        (SELECT st.code 
+         FROM log_entries le 
+         JOIN status_types st ON le.status_id = st.id 
+         WHERE le.driver_id = d.id AND le.end_time IS NULL 
+         ORDER BY le.start_time DESC LIMIT 1) as current_status,
+         
+        -- Check if online (updated within last 1 hour)
+        CASE 
+          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 1 HOUR) THEN TRUE 
+          ELSE FALSE 
+        END as is_online
+        
+      FROM drivers d
+      LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
+      LEFT JOIN trucks t ON dta.truck_id = t.id
+      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
+      WHERE d.is_active = TRUE
+      ORDER BY dl.timestamp DESC
+    `);
+
+    console.log(`📍 Found ${liveLocations.length} drivers with location data`);
+
+    // Filter out drivers without location data for the response
+    const driversWithLocation = liveLocations.filter(driver => 
+      driver.latitude !== null && driver.longitude !== null
+    );
+
+    res.json({
+      success: true,
+      drivers: driversWithLocation || []
+    });
+
+  } catch (error) {
+    console.error('Error fetching live locations:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch live locations' 
+    });
+  }
+});
+
 // Get specific driver details with real location data
-router.get('/drivers/:driverId', async (req, res) => {
+router.get('/drivers/:driverId', adminJwtAuth, async (req, res) => {
   try {
     const { driverId } = req.params;
 
@@ -336,7 +489,7 @@ router.get('/drivers/:driverId', async (req, res) => {
 });
 
 // Get driver location history - REAL DATA
-router.get('/drivers/:driverId/location-history', async (req, res) => {
+router.get('/drivers/:driverId/location-history', adminJwtAuth, async (req, res) => {
   try {
     const { driverId } = req.params;
     const { hours = 24 } = req.query;
@@ -374,62 +527,8 @@ router.get('/drivers/:driverId/location-history', async (req, res) => {
   }
 });
 
-// Get real-time locations of all active drivers for live map
-router.get('/drivers/live-locations', async (req, res) => {
-  try {
-    const [liveLocations] = await db.query(`
-      SELECT 
-        d.id,
-        d.full_name as name,
-        d.username,
-        t.unit_number as truck_number,
-        dl.latitude,
-        dl.longitude,
-        dl.accuracy,
-        dl.heading,
-        dl.speed,
-        dl.address as location,
-        dl.timestamp as last_update,
-        
-        -- Current status
-        (SELECT st.code 
-         FROM log_entries le 
-         JOIN status_types st ON le.status_id = st.id 
-         WHERE le.driver_id = d.id AND le.end_time IS NULL 
-         ORDER BY le.start_time DESC LIMIT 1) as current_status,
-         
-        -- Check if online (updated within last 5 minutes)
-        CASE 
-          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN TRUE 
-          ELSE FALSE 
-        END as is_online
-        
-      FROM drivers d
-      LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
-      LEFT JOIN trucks t ON dta.truck_id = t.id
-      INNER JOIN driver_locations dl ON d.id = dl.driver_id
-      WHERE d.is_active = TRUE
-      AND dl.latitude IS NOT NULL 
-      AND dl.longitude IS NOT NULL
-      ORDER BY dl.timestamp DESC
-    `);
-
-    res.json({
-      success: true,
-      drivers: liveLocations || []
-    });
-
-  } catch (error) {
-    console.error('Error fetching live locations:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch live locations' 
-    });
-  }
-});
-
 // Send message to driver (placeholder - would need real implementation)
-router.post('/drivers/:driverId/message', async (req, res) => {
+router.post('/drivers/:driverId/message', adminJwtAuth, async (req, res) => {
   try {
     const { driverId } = req.params;
     const { message } = req.body;
@@ -455,7 +554,7 @@ router.post('/drivers/:driverId/message', async (req, res) => {
 });
 
 // Get all fleet violations
-router.get('/violations', async (req, res) => {
+router.get('/violations', adminJwtAuth, async (req, res) => {
   try {
     const [violations] = await db.query(`
       SELECT 

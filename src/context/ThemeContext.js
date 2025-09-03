@@ -44,7 +44,20 @@ export const themes = {
     inputBg: '#f9fafb',
     inputBorder: '#d1d5db',
     inputText: '#111827',
+    inputBackground: '#f9fafb',
     placeholder: '#9ca3af',
+    
+    // Buttons
+    buttonSecondary: '#f3f4f6',
+    
+    // Progress
+    progressBackground: '#e5e7eb',
+    
+    // Inactive
+    inactiveColor: '#e5e7eb',
+    
+    // Tab background
+    tabBackground: '#f8f9fa',
     
     // Shadows
     shadowColor: '#000',
@@ -89,7 +102,20 @@ export const themes = {
     inputBg: '#0f172a',
     inputBorder: '#334155',
     inputText: '#f1f5f9',
+    inputBackground: '#0f172a',
     placeholder: '#64748b',
+    
+    // Buttons
+    buttonSecondary: '#334155',
+    
+    // Progress
+    progressBackground: '#334155',
+    
+    // Inactive
+    inactiveColor: '#64748b',
+    
+    // Tab background
+    tabBackground: '#1e293b',
     
     // Shadows
     shadowColor: '#000',

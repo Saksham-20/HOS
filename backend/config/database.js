@@ -241,9 +241,8 @@ class DatabaseManager {
     return this.query.bind(this);
   }
 
-  get getConnection() {
-    return this.getConnection.bind(this);
-  }
+  // FIXED: Removed circular reference - this was causing infinite recursion
+  // The getConnection method is already defined above, no need for getter
 }
 
 // Create and export the database manager instance

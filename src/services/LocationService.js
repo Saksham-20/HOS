@@ -15,16 +15,16 @@ class LocationService {
     // More lenient options to avoid timeouts
     this.highAccuracyOptions = {
       enableHighAccuracy: true,
-      timeout: 30000, // Increased timeout
-      maximumAge: 30000, // Allow slightly older locations
-      distanceFilter: 20, // Only update if moved 20 meters
+      timeout: 60000, // 60 seconds timeout
+      maximumAge: 120000, // Allow 2 minutes old locations
+      distanceFilter: 10, // Only update if moved 10 meters
     };
     
     this.backgroundOptions = {
       enableHighAccuracy: false,
-      timeout: 45000, // Even longer timeout for background
-      maximumAge: 60000,
-      distanceFilter: 50,
+      timeout: 90000, // 90 seconds timeout for background
+      maximumAge: 300000, // Allow 5 minutes old locations
+      distanceFilter: 30,
     };
 
     // Configure Geolocation
@@ -35,41 +35,80 @@ class LocationService {
     });
   }
 
+  async checkLocationServicesEnabled() {
+    try {
+      // For now, assume location services are enabled if we can't check
+      // The actual permission check will handle the real validation
+      console.log('📍 Assuming location services are enabled');
+      return true;
+    } catch (error) {
+      console.log('⚠️ Location services check failed:', error.message);
+      return true; // Default to true to avoid blocking permission requests
+    }
+  }
+
   async requestLocationPermissions() {
     console.log('🔐 Requesting location permissions...');
     
+    // First check if location services are enabled
+    const servicesEnabled = await this.checkLocationServicesEnabled();
+    if (!servicesEnabled) {
+      console.log('❌ Location services are disabled on device');
+      Alert.alert(
+        'Location Services Disabled',
+        'Please enable location services in your device settings to use location tracking.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    
     if (Platform.OS === 'android') {
       try {
-        // Check current permission status first
-        const currentPermission = await PermissionsAndroid.check(
+        // Check both fine and coarse location permissions
+        const fineLocationStatus = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
         );
+        const coarseLocationStatus = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
+        );
         
-        console.log('Current permission status:', currentPermission);
+        console.log('Fine location permission status:', fineLocationStatus);
+        console.log('Coarse location permission status:', coarseLocationStatus);
         
-        if (currentPermission === true) {
-          console.log('✅ Location permission already granted');
+        if (fineLocationStatus === true && coarseLocationStatus === true) {
+          console.log('✅ All location permissions already granted');
           return true;
         }
 
-        // Request permissions one by one for better compatibility
-        const fineLocationPermission = await PermissionsAndroid.request(
+        // Request both permissions together
+        const permissions = [
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission Required',
-            message: 'TruckLog Pro needs location access for Hours of Service compliance tracking.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
+        ];
 
-        console.log('Fine location permission result:', fineLocationPermission);
+        const granted = await PermissionsAndroid.requestMultiple(permissions, {
+          title: 'Location Permission Required',
+          message: 'TruckLog Pro needs location access for Hours of Service compliance tracking and driver status monitoring.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        });
 
-        if (fineLocationPermission === PermissionsAndroid.RESULTS.GRANTED) {
-          console.log('✅ Location permission granted');
+        console.log('Permission request results:', granted);
+
+        const fineGranted = granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+        const coarseGranted = granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+
+        console.log('Fine location granted:', fineGranted);
+        console.log('Coarse location granted:', coarseGranted);
+
+        // Accept if at least one location permission is granted
+        if (fineGranted || coarseGranted) {
+          console.log('✅ Location permission granted (at least one)');
           return true;
-        } else if (fineLocationPermission === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+        } else if (granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ||
+                   granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+          console.log('❌ Location permission permanently denied');
           this.showPermissionSettingsAlert();
           return false;
         } else {
@@ -83,6 +122,7 @@ class LocationService {
     }
     
     // iOS permissions are handled automatically by the system
+    console.log('✅ iOS - Location permissions handled by system');
     return true;
   }
 
@@ -142,6 +182,54 @@ class LocationService {
     });
   }
 
+  // More lenient location method for periodic updates
+  async getLocationForUpdate() {
+    return new Promise((resolve) => {
+      console.log('📍 Getting location for update...');
+      
+      // Use very lenient options for periodic updates
+      const updateOptions = {
+        enableHighAccuracy: false,
+        timeout: 30000, // 30 seconds only
+        maximumAge: 300000, // Accept 5 minutes old location
+        distanceFilter: 0,
+      };
+      
+      Geolocation.getCurrentPosition(
+        (position) => {
+          console.log('✅ Update location obtained');
+          const locationData = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            timestamp: new Date(position.timestamp).toISOString(),
+          };
+          
+          this.lastKnownLocation = locationData;
+          resolve(locationData);
+        },
+        (error) => {
+          console.log('⚠️ Update location failed, using last known location');
+          // For periodic updates, if we can't get new location, use last known
+          if (this.lastKnownLocation) {
+            // Update timestamp to current time
+            const lastKnown = {
+              ...this.lastKnownLocation,
+              timestamp: new Date().toISOString()
+            };
+            resolve(lastKnown);
+          } else {
+            resolve(null); // No location available
+          }
+        },
+        updateOptions
+      );
+    });
+  }
+
   handleLocationError(error) {
     let errorMessage = 'Location error: ';
     
@@ -176,9 +264,9 @@ class LocationService {
     // Try with less accuracy but more reliability
     const fallbackOptions = {
       enableHighAccuracy: false,
-      timeout: 60000,
-      maximumAge: 300000, // 5 minutes
-      distanceFilter: 100,
+      timeout: 120000, // 2 minutes timeout
+      maximumAge: 600000, // 10 minutes old location is acceptable
+      distanceFilter: 200, // Accept location if moved 200 meters
     };
 
     Geolocation.getCurrentPosition(
@@ -199,8 +287,14 @@ class LocationService {
       },
       (error) => {
         console.error('❌ Fallback location also failed:', error);
-        // Try again after a delay
-        setTimeout(() => this.tryFallbackLocation(), 30000);
+        // Try again after a delay, but only if still tracking
+        if (this.isTracking) {
+          setTimeout(() => {
+            if (this.isTracking) {
+              this.tryFallbackLocation();
+            }
+          }, 30000);
+        }
       },
       fallbackOptions
     );
@@ -287,7 +381,7 @@ class LocationService {
     }
 
     this.isTracking = true;
-    this.retryAttempts = 0;
+    this.retryAttempts = 0; // Reset retry attempts when starting tracking
 
     // Get initial location with better error handling
     try {
@@ -322,14 +416,16 @@ class LocationService {
         console.error('❌ Location watch error:', error);
         this.handleLocationError(error);
         
-        // Try to restart tracking after a delay
-        setTimeout(() => {
-          if (this.isTracking) {
-            console.log('🔄 Attempting to restart location tracking...');
-            this.stopLocationTracking();
-            this.startLocationTracking();
-          }
-        }, 30000); // Wait 30 seconds before retrying
+        // Try to restart tracking after a delay, but only if still tracking
+        if (this.isTracking) {
+          setTimeout(() => {
+            if (this.isTracking) {
+              console.log('🔄 Attempting to restart location tracking...');
+              this.stopLocationTracking();
+              this.startLocationTracking();
+            }
+          }, 30000); // Wait 30 seconds before retrying
+        }
       },
       this.highAccuracyOptions
     );
@@ -339,10 +435,14 @@ class LocationService {
       if (this.isTracking) {
         console.log('⏰ Periodic location update');
         try {
-          const location = await this.getCurrentLocation();
-          await this.updateLocationToServer(location);
+          // Use a more lenient approach for periodic updates
+          const location = await this.getLocationForUpdate();
+          if (location) {
+            await this.updateLocationToServer(location);
+          }
         } catch (error) {
           console.error('❌ Periodic location update failed:', error);
+          // Don't fail the entire tracking for periodic update failures
         }
       }
     }, this.updateInterval);
@@ -420,6 +520,39 @@ class LocationService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
     return R * c; // Distance in meters
+  }
+
+  // Manual permission check method
+  async checkAndRequestPermissions() {
+    console.log('🔍 Manually checking location permissions...');
+    
+    if (Platform.OS === 'android') {
+      try {
+        const fineLocationStatus = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        const coarseLocationStatus = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION
+        );
+        
+        console.log('Current permission status:');
+        console.log('- Fine location:', fineLocationStatus);
+        console.log('- Coarse location:', coarseLocationStatus);
+        
+        if (fineLocationStatus || coarseLocationStatus) {
+          console.log('✅ Location permissions are already granted');
+          return true;
+        } else {
+          console.log('❌ Location permissions not granted, requesting...');
+          return await this.requestLocationPermissions();
+        }
+      } catch (error) {
+        console.error('Error checking permissions:', error);
+        return false;
+      }
+    }
+    
+    return true; // iOS handled by system
   }
 
   // Health check method

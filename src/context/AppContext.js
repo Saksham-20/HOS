@@ -322,6 +322,12 @@ export const AppProvider = ({ children }) => {
 
   const startLocationTracking = async () => {
     try {
+      // First check and request permissions if needed
+      const hasPermissions = await LocationService.checkAndRequestPermissions();
+      if (!hasPermissions) {
+        throw new Error('Location permission denied');
+      }
+      
       await LocationService.startLocationTracking();
       dispatch({ type: 'SET_LOCATION_TRACKING', payload: true });
       console.log('Location tracking started');
@@ -353,7 +359,10 @@ export const AppProvider = ({ children }) => {
       if (!mountedRef.current) return;
 
       if (logsResponse.success) {
+        console.log('📋 Logs response:', logsResponse);
         dispatch({ type: 'SET_LOGS', payload: logsResponse.logs });
+      } else {
+        console.log('❌ Logs response failed:', logsResponse);
       }
 
       if (summaryResponse.success) {
@@ -659,6 +668,18 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const testLocationPermissions = async () => {
+    try {
+      console.log('🧪 Testing location permissions...');
+      const hasPermissions = await LocationService.checkAndRequestPermissions();
+      console.log('Permission test result:', hasPermissions);
+      return hasPermissions;
+    } catch (error) {
+      console.error('Permission test failed:', error);
+      return false;
+    }
+  };
+
   const value = {
     state,
     dispatch,
@@ -677,7 +698,8 @@ export const AppProvider = ({ children }) => {
     forceLocationUpdate,
     startLocationTracking,
     stopLocationTracking,
-    persistDriverStatus
+    persistDriverStatus,
+    testLocationPermissions
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
