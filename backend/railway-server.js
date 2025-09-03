@@ -26,7 +26,7 @@ const mockDrivers = [
   {
     id: 1,
     username: 'driver1',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password123
+    password: '$2a$10$aJ7xzlnJsa45H9sSobOWE.T1zJAeMFNx3J13SqFvg4SG6zQTGJhYS', // password123
     fullName: 'John Doe',
     licenseNumber: 'D123456789',
     licenseState: 'CA',
