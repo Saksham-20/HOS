@@ -3,7 +3,7 @@ services:
     name: hos-backend
     env: node
     buildCommand: npm install
-    startCommand: node railway-server.js
+    startCommand: node railway-server-simple.js
     envVars:
       - key: NODE_ENV
         value: production
