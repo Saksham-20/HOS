@@ -75,7 +75,7 @@ app.post('/api/auth/login', async (req, res) => {
       success: true,
       message: 'Login successful',
       token: token,
-      user: {
+      driver: {
         id: user.id,
         username: user.username,
         fullName: user.fullName,
@@ -135,7 +135,7 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Registration successful',
-      user: {
+      driver: {
         id: newDriver.id,
         username: newDriver.username,
         fullName: newDriver.fullName,
