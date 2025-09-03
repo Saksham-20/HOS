@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Production API URL - Update this to your deployed backend URL
 const API_BASE_URL = __DEV__ 
   ? 'http://192.168.29.161:3000/api' // Development URL - Your current IP
-  : 'https://your-backend-domain.com/api'; // Production URL - UPDATE THIS
+  : 'https://hos-backend-h6c0.onrender.com/api'; // Production URL - Render.com
 
 class ApiService {
   constructor() {
