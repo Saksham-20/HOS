@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 
@@ -20,11 +21,12 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Mock data for testing
+// Mock data for testing with hashed passwords
 const mockDrivers = [
   {
     id: 1,
     username: 'driver1',
+    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password123
     fullName: 'John Doe',
     licenseNumber: 'D123456789',
     licenseState: 'CA',
@@ -35,7 +37,7 @@ const mockDrivers = [
 ];
 
 // Auth routes
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   
   if (!username || !password) {
@@ -45,32 +47,54 @@ app.post('/api/auth/login', (req, res) => {
     });
   }
   
-  // Simple mock authentication
-  if (username === 'driver1' && password === 'password123') {
+  try {
+    // Find user in mock data
+    const user = mockDrivers.find(driver => driver.username === username);
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // Compare password using bcrypt
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // Generate token
     const token = 'mock-jwt-token-' + Date.now();
+    
     res.json({
       success: true,
       message: 'Login successful',
       token: token,
       user: {
-        id: 1,
-        username: 'driver1',
-        fullName: 'John Doe',
-        licenseNumber: 'D123456789',
-        licenseState: 'CA',
-        carrierName: 'Test Carrier',
-        truckNumber: 'TRUCK001'
+        id: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        licenseNumber: user.licenseNumber,
+        licenseState: user.licenseState,
+        carrierName: user.carrierName,
+        truckNumber: user.truckNumber
       }
     });
-  } else {
-    res.status(401).json({
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Invalid credentials'
+      message: 'Internal server error'
     });
   }
 });
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { username, password, fullName, licenseNumber, licenseState, carrierName, truckNumber } = req.body;
   
   if (!username || !password || !fullName || !licenseNumber || !licenseState || !carrierName || !truckNumber) {
@@ -80,22 +104,54 @@ app.post('/api/auth/register', (req, res) => {
     });
   }
   
-  // Mock registration
-  const newDriver = {
-    id: Date.now(),
-    username,
-    fullName,
-    licenseNumber,
-    licenseState,
-    carrierName,
-    truckNumber
-  };
-  
-  res.status(201).json({
-    success: true,
-    message: 'Registration successful',
-    user: newDriver
-  });
+  try {
+    // Check if username already exists
+    const existingUser = mockDrivers.find(driver => driver.username === username);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username already exists'
+      });
+    }
+    
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Mock registration
+    const newDriver = {
+      id: Date.now(),
+      username,
+      password: hashedPassword,
+      fullName,
+      licenseNumber,
+      licenseState,
+      carrierName,
+      truckNumber
+    };
+    
+    // Add to mock data (in real app, this would be saved to database)
+    mockDrivers.push(newDriver);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      user: {
+        id: newDriver.id,
+        username: newDriver.username,
+        fullName: newDriver.fullName,
+        licenseNumber: newDriver.licenseNumber,
+        licenseState: newDriver.licenseState,
+        carrierName: newDriver.carrierName,
+        truckNumber: newDriver.truckNumber
+      }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
 });
 
 // Driver routes
