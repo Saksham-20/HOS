@@ -15,16 +15,16 @@ class LocationService {
     // More lenient options to avoid timeouts
     this.highAccuracyOptions = {
       enableHighAccuracy: true,
-      timeout: 60000, // 60 seconds timeout
-      maximumAge: 120000, // Allow 2 minutes old locations
+      timeout: 30000, // Reduced to 30 seconds to fail faster
+      maximumAge: 300000, // Allow 5 minutes old locations (more lenient)
       distanceFilter: 10, // Only update if moved 10 meters
     };
     
     this.backgroundOptions = {
       enableHighAccuracy: false,
-      timeout: 90000, // 90 seconds timeout for background
-      maximumAge: 300000, // Allow 5 minutes old locations
-      distanceFilter: 30,
+      timeout: 45000, // Reduced to 45 seconds for background
+      maximumAge: 600000, // Allow 10 minutes old locations
+      distanceFilter: 50, // Increased distance filter for background
     };
 
     // Configure Geolocation
@@ -150,6 +150,14 @@ class LocationService {
     return new Promise((resolve, reject) => {
       console.log('📍 Getting current location...');
       
+      // Use more lenient options for initial location to avoid timeouts
+      const initialOptions = {
+        enableHighAccuracy: false, // Start with lower accuracy
+        timeout: 20000, // 20 seconds timeout
+        maximumAge: 300000, // Accept 5 minutes old location
+        distanceFilter: 0,
+      };
+      
       Geolocation.getCurrentPosition(
         (position) => {
           console.log('✅ Location obtained:', {
@@ -173,11 +181,12 @@ class LocationService {
           resolve(locationData);
         },
         (error) => {
-          console.error('❌ Location error:', error);
-          this.handleLocationError(error);
+          console.log('⚠️ Initial location failed, will try fallback:', error.message);
+          // Don't call handleLocationError for initial location failure
+          // Let the fallback handle it gracefully
           reject(error);
         },
-        this.highAccuracyOptions
+        initialOptions
       );
     });
   }
@@ -190,8 +199,8 @@ class LocationService {
       // Use very lenient options for periodic updates
       const updateOptions = {
         enableHighAccuracy: false,
-        timeout: 30000, // 30 seconds only
-        maximumAge: 300000, // Accept 5 minutes old location
+        timeout: 20000, // Reduced to 20 seconds for faster failure
+        maximumAge: 600000, // Accept 10 minutes old location (more lenient)
         distanceFilter: 0,
       };
       
@@ -231,73 +240,95 @@ class LocationService {
   }
 
   handleLocationError(error) {
+    const errorDetails = {
+      code: error.code,
+      message: error.message,
+      timestamp: new Date().toISOString(),
+      retryAttempts: this.retryAttempts,
+      isTracking: this.isTracking
+    };
+    
     let errorMessage = 'Location error: ';
     
     switch (error.code) {
       case 1: // PERMISSION_DENIED
         errorMessage += 'Permission denied. Please enable location access.';
+        console.error('🚫 PERMISSION_DENIED:', errorDetails);
         this.showPermissionSettingsAlert();
         break;
       case 2: // POSITION_UNAVAILABLE
         errorMessage += 'Position unavailable. Please check GPS settings.';
+        console.error('📡 POSITION_UNAVAILABLE:', errorDetails);
         break;
       case 3: // TIMEOUT
         errorMessage += 'Location request timed out. Will retry with lower accuracy.';
-        this.tryFallbackLocation();
+        console.log('⏰ TIMEOUT (will try fallback):', errorDetails);
+        // Only try fallback if we haven't exceeded max attempts
+        if (this.retryAttempts < this.maxRetryAttempts) {
+          this.tryFallbackLocation();
+        } else {
+          console.log('❌ Max retry attempts reached, stopping fallback attempts');
+        }
         break;
       default:
         errorMessage += error.message || 'Unknown error occurred.';
+        console.error('❓ UNKNOWN_ERROR:', errorDetails);
     }
     
-    console.error(errorMessage);
+    // Only log as error for serious issues, use log for timeouts
+    if (error.code === 3) {
+      console.log(errorMessage);
+    } else {
+      console.error(errorMessage);
+    }
   }
 
   async tryFallbackLocation() {
     if (this.retryAttempts >= this.maxRetryAttempts) {
-      console.log('❌ Max retry attempts reached');
-      return;
+      console.log('❌ Max retry attempts reached, stopping fallback attempts');
+      throw new Error('Max retry attempts reached');
     }
 
     this.retryAttempts++;
     console.log(`🔄 Attempting fallback location (attempt ${this.retryAttempts}/${this.maxRetryAttempts})`);
 
-    // Try with less accuracy but more reliability
-    const fallbackOptions = {
-      enableHighAccuracy: false,
-      timeout: 120000, // 2 minutes timeout
-      maximumAge: 600000, // 10 minutes old location is acceptable
-      distanceFilter: 200, // Accept location if moved 200 meters
-    };
+    return new Promise((resolve, reject) => {
+      // Try with less accuracy but more reliability
+      const fallbackOptions = {
+        enableHighAccuracy: false,
+        timeout: 30000, // Reduced to 30 seconds to fail faster
+        maximumAge: 600000, // 10 minutes old location is acceptable
+        distanceFilter: 200, // Accept location if moved 200 meters
+      };
 
-    Geolocation.getCurrentPosition(
-      (position) => {
-        console.log('✅ Fallback location obtained');
-        const locationData = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude,
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-          timestamp: new Date(position.timestamp).toISOString(),
-        };
-        
-        this.lastKnownLocation = locationData;
-        this.updateLocationToServer(locationData);
-      },
-      (error) => {
-        console.error('❌ Fallback location also failed:', error);
-        // Try again after a delay, but only if still tracking
-        if (this.isTracking) {
-          setTimeout(() => {
-            if (this.isTracking) {
-              this.tryFallbackLocation();
-            }
-          }, 30000);
-        }
-      },
-      fallbackOptions
-    );
+      Geolocation.getCurrentPosition(
+        (position) => {
+          console.log('✅ Fallback location obtained');
+          this.retryAttempts = 0; // Reset retry counter on success
+          const locationData = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            timestamp: new Date(position.timestamp).toISOString(),
+          };
+          
+          this.lastKnownLocation = locationData;
+          this.updateLocationToServer(locationData);
+          resolve(locationData);
+        },
+        (error) => {
+          console.error('❌ Fallback location also failed:', error);
+          // Don't automatically retry - let the periodic update handle it
+          // This prevents infinite retry loops
+          console.log('⚠️ Will rely on periodic updates for location tracking');
+          reject(error);
+        },
+        fallbackOptions
+      );
+    });
   }
 
   async reverseGeocode(latitude, longitude) {
@@ -387,9 +418,15 @@ class LocationService {
     try {
       const initialLocation = await this.getCurrentLocation();
       await this.updateLocationToServer(initialLocation);
+      console.log('✅ Initial location obtained and updated');
     } catch (error) {
-      console.error('❌ Failed to get initial location:', error);
-      // Don't stop tracking just because initial location failed
+      console.log('⚠️ Initial location failed, trying fallback approach...');
+      // Try fallback location immediately instead of waiting for watchPosition
+      try {
+        await this.tryFallbackLocation();
+      } catch (fallbackError) {
+        console.log('⚠️ Fallback also failed, continuing with watchPosition tracking');
+      }
     }
 
     // Start watching location changes
