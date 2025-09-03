@@ -4,8 +4,10 @@
   "description": "Backend API for TruckLog Pro ELD System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node railway-server.js",
+    "dev": "nodemon server.js",
+    "build": "echo 'Build completed'",
+    "railway": "node railway-server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
