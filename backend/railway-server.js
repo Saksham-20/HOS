@@ -84,69 +84,6 @@ app.post('/api/auth/login', async (req, res) => {
         truckNumber: user.truckNumber
       }
     });
-
-    // Get driver from database
-    const [drivers] = await db.query(
-      `SELECT d.*, c.name as carrier_name 
-       FROM drivers d 
-       LEFT JOIN carriers c ON d.carrier_id = c.id 
-       WHERE d.username = $1 AND d.is_active = TRUE`,
-      [username]
-    );
-
-    if (drivers.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    const driver = drivers[0];
-
-    // Check password
-    const isMatch = await bcrypt.compare(password, driver.password_hash);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Get current truck assignment
-    const [assignments] = await db.query(
-      `SELECT t.* FROM driver_truck_assignments dta
-       JOIN trucks t ON dta.truck_id = t.id
-       WHERE dta.driver_id = $1 AND dta.is_active = TRUE`,
-      [driver.id]
-    );
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { driverId: driver.id, username: driver.username },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Update last login
-    await db.query(
-      'UPDATE drivers SET last_login = NOW() WHERE id = $1',
-      [driver.id]
-    );
-    
-    res.json({
-      success: true,
-      message: 'Login successful',
-      token: token,
-      driver: {
-        id: driver.id,
-        username: driver.username,
-        fullName: driver.full_name,
-        licenseNumber: driver.license_number,
-        licenseState: driver.license_state,
-        carrierName: driver.carrier_name,
-        truckNumber: assignments[0]?.unit_number || null
-      }
-    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({
@@ -304,48 +241,6 @@ app.post('/api/admin/login', async (req, res) => {
         message: 'Invalid credentials'
       });
     }
-
-    // Check admin credentials in database
-    const [admins] = await db.query(
-      'SELECT * FROM admins WHERE username = $1 AND is_active = TRUE',
-      [username]
-    );
-    
-    if (admins.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-    
-    const admin = admins[0];
-    
-    // Compare password using bcrypt
-    const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
-    
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-    
-    // Generate JWT token for admin
-    const token = jwt.sign(
-      { role: 'admin', username: admin.username, adminId: admin.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-    
-    res.json({
-      success: true,
-      message: 'Admin login successful',
-      token: token,
-      admin: {
-        username: admin.username,
-        role: admin.role
-      }
-    });
   } catch (error) {
     console.error('Admin login error:', error);
     res.status(500).json({
