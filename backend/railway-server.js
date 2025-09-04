@@ -43,6 +43,50 @@ app.post('/api/auth/login', async (req, res) => {
   }
   
   try {
+    // Check if database is connected
+    if (!db.manager || !db.manager.isConnected) {
+      console.error('❌ Database not connected, using fallback authentication');
+      
+      // Fallback to hardcoded users for testing
+      const fallbackUsers = [
+        { username: 'testdriver', password: '123456789', fullName: 'Test Driver', licenseNumber: 'D123456789', licenseState: 'CA', carrierName: 'Test Carrier', truckNumber: 'TRUCK001' },
+        { username: 'saksham', password: '123456789', fullName: 'Saksham Panjla', licenseNumber: 'D987654321', licenseState: 'TX', carrierName: 'Test Carrier', truckNumber: 'TRUCK002' },
+        { username: 'nishant', password: '123456789', fullName: 'Nishant Kumar', licenseNumber: 'D456789123', licenseState: 'FL', carrierName: 'Test Carrier', truckNumber: 'TRUCK003' },
+        { username: 'testuser', password: '123456789', fullName: 'Test User', licenseNumber: 'D789123456', licenseState: 'NY', carrierName: 'Test Carrier', truckNumber: 'TRUCK004' }
+      ];
+      
+      const user = fallbackUsers.find(u => u.username === username && u.password === password);
+      
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid credentials'
+        });
+      }
+      
+      // Generate JWT token
+      const token = jwt.sign(
+        { driverId: 1, username: user.username },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      
+      return res.json({
+        success: true,
+        message: 'Login successful (fallback mode)',
+        token: token,
+        driver: {
+          id: 1,
+          username: user.username,
+          fullName: user.fullName,
+          licenseNumber: user.licenseNumber,
+          licenseState: user.licenseState,
+          carrierName: user.carrierName,
+          truckNumber: user.truckNumber
+        }
+      });
+    }
+
     // Get driver from database
     const [drivers] = await db.query(
       `SELECT d.*, c.name as carrier_name 
@@ -109,7 +153,8 @@ app.post('/api/auth/login', async (req, res) => {
     console.error('Login error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
     });
   }
 });
@@ -235,6 +280,35 @@ app.post('/api/admin/login', async (req, res) => {
   }
   
   try {
+    // Check if database is connected
+    if (!db.manager || !db.manager.isConnected) {
+      console.error('❌ Database not connected, using fallback admin authentication');
+      
+      // Fallback admin credentials
+      if (username === 'admin' && password === 'admin123') {
+        const token = jwt.sign(
+          { role: 'admin', username: 'admin', adminId: 1 },
+          process.env.JWT_SECRET,
+          { expiresIn: '8h' }
+        );
+        
+        return res.json({
+          success: true,
+          message: 'Admin login successful (fallback mode)',
+          token: token,
+          admin: {
+            username: 'admin',
+            role: 'admin'
+          }
+        });
+      } else {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid credentials'
+        });
+      }
+    }
+
     // Check admin credentials in database
     const [admins] = await db.query(
       'SELECT * FROM admins WHERE username = $1 AND is_active = TRUE',
@@ -280,7 +354,8 @@ app.post('/api/admin/login', async (req, res) => {
     console.error('Admin login error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
     });
   }
 });
@@ -432,6 +507,27 @@ app.get('/api/admin/fleet/stats', async (req, res) => {
   }
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'HOS Backend API is running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      docs: '/api/docs',
+      auth: {
+        login: 'POST /api/auth/login',
+        register: 'POST /api/auth/register'
+      },
+      admin: {
+        login: 'POST /api/admin/login'
+      }
+    },
+    status: 'online'
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -440,7 +536,8 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'production',
     server: 'railway-server.js (PRODUCTION)',
-    features: ['JWT Authentication', 'bcryptjs Password Hashing', 'Admin Login']
+    features: ['JWT Authentication', 'bcryptjs Password Hashing', 'Admin Login'],
+    database: db.manager && db.manager.isConnected ? 'Connected' : 'Fallback Mode'
   });
 });
 
