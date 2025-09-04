@@ -7,7 +7,9 @@
     "start": "node railway-server.js",
     "dev": "nodemon server.js",
     "build": "echo 'Build completed'",
-    "render": "node railway-server.js"
+    "render": "node railway-server.js",
+    "setup-db": "node migrations/setup-postgres.js",
+    "deploy": "node deploy-postgres.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,6 +21,7 @@
     "jsonwebtoken": "^9.0.0",
     "morgan": "^1.10.0",
     "mysql2": "^3.6.0",
+    "pg": "^8.11.3",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {

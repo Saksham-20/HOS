@@ -5,7 +5,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('./config/database');
+const db = require('./config/postgres-database');
 
 // SECURITY: Set JWT_SECRET with fallback for production
 if (!process.env.JWT_SECRET) {
@@ -48,7 +48,7 @@ app.post('/api/auth/login', async (req, res) => {
       `SELECT d.*, c.name as carrier_name 
        FROM drivers d 
        LEFT JOIN carriers c ON d.carrier_id = c.id 
-       WHERE d.username = ? AND d.is_active = TRUE`,
+       WHERE d.username = $1 AND d.is_active = TRUE`,
       [username]
     );
 
@@ -74,7 +74,7 @@ app.post('/api/auth/login', async (req, res) => {
     const [assignments] = await db.query(
       `SELECT t.* FROM driver_truck_assignments dta
        JOIN trucks t ON dta.truck_id = t.id
-       WHERE dta.driver_id = ? AND dta.is_active = TRUE`,
+       WHERE dta.driver_id = $1 AND dta.is_active = TRUE`,
       [driver.id]
     );
 
@@ -87,7 +87,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Update last login
     await db.query(
-      'UPDATE drivers SET last_login = NOW() WHERE id = ?',
+      'UPDATE drivers SET last_login = NOW() WHERE id = $1',
       [driver.id]
     );
     
@@ -131,7 +131,7 @@ app.post('/api/auth/register', async (req, res) => {
     try {
       // Check if username exists
       const [existingUser] = await connection.query(
-        'SELECT id FROM drivers WHERE username = ?',
+        'SELECT id FROM drivers WHERE username = $1',
         [username]
       );
 
@@ -142,7 +142,7 @@ app.post('/api/auth/register', async (req, res) => {
       // Get or create carrier
       let carrierId;
       const [carriers] = await connection.query(
-        'SELECT id FROM carriers WHERE name = ?',
+        'SELECT id FROM carriers WHERE name = $1',
         [carrierName]
       );
 
@@ -150,16 +150,16 @@ app.post('/api/auth/register', async (req, res) => {
         carrierId = carriers[0].id;
       } else {
         const [carrierResult] = await connection.query(
-          'INSERT INTO carriers (name) VALUES (?)',
+          'INSERT INTO carriers (name) VALUES ($1) RETURNING id',
           [carrierName]
         );
-        carrierId = carrierResult.insertId;
+        carrierId = carrierResult[0].id;
       }
 
       // Get or create truck
       let truckId;
       const [trucks] = await connection.query(
-        'SELECT id FROM trucks WHERE unit_number = ? AND carrier_id = ?',
+        'SELECT id FROM trucks WHERE unit_number = $1 AND carrier_id = $2',
         [truckNumber, carrierId]
       );
 
@@ -167,10 +167,10 @@ app.post('/api/auth/register', async (req, res) => {
         truckId = trucks[0].id;
       } else {
         const [truckResult] = await connection.query(
-          'INSERT INTO trucks (carrier_id, unit_number) VALUES (?, ?)',
+          'INSERT INTO trucks (carrier_id, unit_number) VALUES ($1, $2) RETURNING id',
           [carrierId, truckNumber]
         );
-        truckId = truckResult.insertId;
+        truckId = truckResult[0].id;
       }
 
       // Hash password
@@ -181,15 +181,15 @@ app.post('/api/auth/register', async (req, res) => {
         `INSERT INTO drivers (
           carrier_id, username, password_hash, email, 
           full_name, license_number, license_state
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
         [carrierId, username, hashedPassword, email, fullName, licenseNumber, licenseState]
       );
 
-      const driverId = driverResult.insertId;
+      const driverId = driverResult[0].id;
 
       // Assign driver to truck
       await connection.query(
-        'INSERT INTO driver_truck_assignments (driver_id, truck_id) VALUES (?, ?)',
+        'INSERT INTO driver_truck_assignments (driver_id, truck_id) VALUES ($1, $2)',
         [driverId, truckId]
       );
 
@@ -237,7 +237,7 @@ app.post('/api/admin/login', async (req, res) => {
   try {
     // Check admin credentials in database
     const [admins] = await db.query(
-      'SELECT * FROM admins WHERE username = ? AND is_active = TRUE',
+      'SELECT * FROM admins WHERE username = $1 AND is_active = TRUE',
       [username]
     );
     

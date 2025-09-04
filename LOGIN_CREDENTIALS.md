@@ -10,6 +10,8 @@ All driver passwords have been updated to: **`123456789`**
 | `nishant` | `123456789` | - | ✅ Active |
 | `testuser` | `123456789` | test@example.com | ✅ Active |
 
+**Note:** These are the actual users from your database. New registrations will now be saved to the database.
+
 ## Admin Login Credentials
 | Username | Password | Role | Status |
 |----------|----------|------|--------|
