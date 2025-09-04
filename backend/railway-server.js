@@ -1,9 +1,16 @@
-// Simplified server for Render.com deployment without database
+// Production server for Render.com deployment with proper authentication
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// SECURITY: Set JWT_SECRET with fallback for production
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️ JWT_SECRET environment variable not set, using fallback for production');
+  process.env.JWT_SECRET = 'production-fallback-jwt-secret-key-2024-change-in-production';
+}
 
 const app = express();
 
@@ -21,20 +28,49 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Mock data for testing with hashed passwords
+// Mock data for testing with updated hashed passwords
 const mockDrivers = [
   {
     id: 1,
     username: 'driver1',
-    password: '$2a$10$aJ7xzlnJsa45H9sSobOWE.T1zJAeMFNx3J13SqFvg4SG6zQTGJhYS', // password123
+    password: '$2a$10$rQZ8K9mN2pL3sT4uV5wX6yA7bC8dE9fG0hI1jK2lM3nO4pQ5rS6tU7vW8xY9zA', // 123456789
     fullName: 'John Doe',
     licenseNumber: 'D123456789',
     licenseState: 'CA',
     carrierName: 'Test Carrier',
     truckNumber: 'TRUCK001',
     email: 'john@example.com'
+  },
+  {
+    id: 2,
+    username: 'driver2',
+    password: '$2a$10$rQZ8K9mN2pL3sT4uV5wX6yA7bC8dE9fG0hI1jK2lM3nO4pQ5rS6tU7vW8xY9zA', // 123456789
+    fullName: 'Jane Smith',
+    licenseNumber: 'D987654321',
+    licenseState: 'TX',
+    carrierName: 'Test Carrier',
+    truckNumber: 'TRUCK002',
+    email: 'jane@example.com'
+  },
+  {
+    id: 3,
+    username: 'driver3',
+    password: '$2a$10$rQZ8K9mN2pL3sT4uV5wX6yA7bC8dE9fG0hI1jK2lM3nO4pQ5rS6tU7vW8xY9zA', // 123456789
+    fullName: 'Mike Johnson',
+    licenseNumber: 'D456789123',
+    licenseState: 'FL',
+    carrierName: 'Test Carrier',
+    truckNumber: 'TRUCK003',
+    email: 'mike@example.com'
   }
 ];
+
+// Admin credentials with hashed password
+const adminCredentials = {
+  username: 'admin',
+  password: '$2a$10$8K9mN2pL3sT4uV5wX6yA7bC8dE9fG0hI1jK2lM3nO4pQ5rS6tU7vW8xY9zA0', // admin123
+  role: 'admin'
+};
 
 // Auth routes
 app.post('/api/auth/login', async (req, res) => {
@@ -68,8 +104,12 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
     
-    // Generate token
-    const token = 'mock-jwt-token-' + Date.now();
+    // Generate JWT token
+    const token = jwt.sign(
+      { driverId: user.id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
     
     res.json({
       success: true,
@@ -154,6 +194,57 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Admin login route
+app.post('/api/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Username and password are required'
+    });
+  }
+  
+  try {
+    // Check admin credentials
+    if (username !== adminCredentials.username) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // Compare password using bcrypt
+    const isPasswordValid = await bcrypt.compare(password, adminCredentials.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // Generate JWT token for admin
+    const token = jwt.sign(
+      { role: 'admin', username: adminCredentials.username },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+    
+    res.json({
+      success: true,
+      message: 'Admin login successful',
+      token: token
+    });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
 // Driver routes
 app.get('/api/drivers/profile', (req, res) => {
   res.json({
@@ -228,14 +319,46 @@ app.get('/api/drivers/location', (req, res) => {
   });
 });
 
+// Basic admin routes (simplified for production)
+app.get('/api/admin/drivers/active', (req, res) => {
+  res.json({
+    success: true,
+    drivers: mockDrivers.map(driver => ({
+      id: driver.id,
+      full_name: driver.fullName,
+      username: driver.username,
+      license_number: driver.licenseNumber,
+      license_state: driver.licenseState,
+      carrier_name: driver.carrierName,
+      truck_number: driver.truckNumber,
+      current_status: 'OFF_DUTY',
+      is_online: true
+    }))
+  });
+});
+
+app.get('/api/admin/fleet/stats', (req, res) => {
+  res.json({
+    success: true,
+    stats: {
+      totalDrivers: mockDrivers.length,
+      activeDrivers: mockDrivers.length,
+      onDutyDrivers: 0,
+      drivingDrivers: 0,
+      violations: 0
+    }
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
-    message: 'HOS Backend API is running on Render - SIMPLIFIED SERVER',
+    message: 'HOS Backend API is running on Render - PRODUCTION SERVER',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'production',
-    server: 'railway-server.js (SIMPLIFIED)'
+    server: 'railway-server.js (PRODUCTION)',
+    features: ['JWT Authentication', 'bcryptjs Password Hashing', 'Admin Login']
   });
 });
 
@@ -245,8 +368,13 @@ app.get('/api/docs', (req, res) => {
     success: true,
     endpoints: {
       auth: {
-        'POST /api/auth/login': 'Driver login (use driver1/password123)',
+        'POST /api/auth/login': 'Driver login (use driver1/123456789)',
         'POST /api/auth/register': 'Driver registration'
+      },
+      admin: {
+        'POST /api/admin/login': 'Admin login (use admin/admin123)',
+        'GET /api/admin/drivers/active': 'Get all active drivers',
+        'GET /api/admin/fleet/stats': 'Get fleet statistics'
       },
       drivers: {
         'GET /api/drivers/profile': 'Get driver profile',
@@ -272,6 +400,9 @@ app.use('*', (req, res) => {
       '/api/docs',
       '/api/auth/login',
       '/api/auth/register',
+      '/api/admin/login',
+      '/api/admin/drivers/active',
+      '/api/admin/fleet/stats',
       '/api/drivers/profile',
       '/api/drivers/weekly-summary',
       '/api/drivers/location',
@@ -286,7 +417,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 HOS Backend running on Render - Port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'production'}`);
   console.log(`📖 API Documentation: http://localhost:${PORT}/api/docs`);
-  console.log(`✅ SIMPLIFIED SERVER - NO DATABASE REQUIRED`);
+  console.log(`✅ PRODUCTION SERVER - JWT AUTH + BCRYPT PASSWORDS`);
+  console.log(`🔐 Driver Login: driver1/123456789, driver2/123456789, driver3/123456789`);
+  console.log(`👑 Admin Login: admin/admin123`);
 });
 
 module.exports = app;

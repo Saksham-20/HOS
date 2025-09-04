@@ -5,21 +5,46 @@ const db = require('../config/database');
 
 const router = express.Router();
 
-// Simple admin authentication middleware for login (POST requests)
-const adminLoginAuth = (req, res, next) => {
+// Admin authentication middleware for login (POST requests) with bcrypt
+const adminLoginAuth = async (req, res, next) => {
   const { username, password } = req.body;
   
-  // Use environment variables for admin credentials
-  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Username and password are required'
+    });
+  }
   
-  if (username === adminUsername && password === adminPassword) {
+  try {
+    // Check if admin exists in database
+    const [admins] = await db.query(
+      'SELECT * FROM admins WHERE username = ? AND is_active = TRUE',
+      [username]
+    );
+    
+    if (admins.length === 0) {
+      console.warn(`❌ Failed admin login attempt from IP: ${req.ip || req.connection.remoteAddress} - Username: ${username}`);
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+    
+    const admin = admins[0];
+    
+    // Compare password using bcrypt
+    const bcrypt = require('bcryptjs');
+    const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
+    
+    if (!isPasswordValid) {
+      console.warn(`❌ Failed admin login attempt from IP: ${req.ip || req.connection.remoteAddress} - Username: ${username}`);
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+    
     req.isAdmin = true;
+    req.admin = admin;
     next();
-  } else {
-    // Log failed login attempts for security monitoring
-    console.warn(`❌ Failed admin login attempt from IP: ${req.ip || req.connection.remoteAddress} - Username: ${username}`);
-    res.status(401).json({ success: false, message: 'Unauthorized' });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -103,7 +128,7 @@ const adminJwtAuth = (req, res, next) => {
 // Admin login
 router.post('/login', adminLoginAuth, (req, res) => {
   const token = jwt.sign(
-    { role: 'admin', username: 'admin' },
+    { role: 'admin', username: req.admin.username, adminId: req.admin.id },
     process.env.JWT_SECRET,
     { expiresIn: '8h' }
   );
@@ -111,7 +136,11 @@ router.post('/login', adminLoginAuth, (req, res) => {
   res.json({
     success: true,
     token,
-    message: 'Admin login successful'
+    message: 'Admin login successful',
+    admin: {
+      username: req.admin.username,
+      role: req.admin.role
+    }
   });
 });
 
