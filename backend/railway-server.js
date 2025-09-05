@@ -10,6 +10,24 @@ require('dotenv').config();
 // Import database connection
 const db = require('./config/postgres-database');
 
+// JWT Authentication Middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return next(); // Continue without user info
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return next(); // Continue without user info
+    }
+    req.user = user;
+    next();
+  });
+};
+
 const app = express();
 
 // Middleware
@@ -365,8 +383,8 @@ app.post('/api/auth/register', async (req, res) => {
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
       // Create driver
       const driverResult = await client.query(
         `INSERT INTO drivers (
@@ -378,7 +396,7 @@ app.post('/api/auth/register', async (req, res) => {
 
       return driverResult.rows[0].id;
     });
-
+    
     res.status(201).json({
       success: true,
       message: 'Driver registered successfully',
@@ -437,7 +455,7 @@ app.post('/api/admin/login', async (req, res) => {
 });
 
 // DRIVER ROUTES
-app.get('/api/drivers/profile', async (req, res) => {
+app.get('/api/drivers/profile', authenticateToken, async (req, res) => {
   try {
     // Get driver ID from JWT token (if available) or use fallback
     const driverId = req.user?.driverId || 1; // Default to driver ID 1 for testing
@@ -494,7 +512,7 @@ app.get('/api/drivers/cycle-info', (req, res) => {
 });
 
 // LOCATION ROUTES
-app.post('/api/drivers/location', async (req, res) => {
+app.post('/api/drivers/location', authenticateToken, async (req, res) => {
   try {
     const { latitude, longitude, accuracy, address, speed, heading } = req.body;
     
@@ -505,7 +523,23 @@ app.post('/api/drivers/location', async (req, res) => {
       });
     }
 
-    // For now, just return success (in production, you'd save to database)
+    // Get driver ID from JWT token or use fallback
+    const driverId = req.user?.driverId || 1;
+
+    // Save location to database
+    await db.query(`
+      INSERT INTO driver_locations (
+        driver_id, latitude, longitude, accuracy, address, speed, heading, timestamp
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    `, [driverId, latitude, longitude, accuracy || 15.0, address || 'Unknown Location', speed || 0.0, heading || 0.0]);
+
+    // Also save to location history
+    await db.query(`
+      INSERT INTO location_history (
+        driver_id, latitude, longitude, address, speed, heading, timestamp
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    `, [driverId, latitude, longitude, address || 'Unknown Location', speed || 0.0, heading || 0.0]);
+
     res.json({
       success: true,
       message: 'Location updated successfully',
@@ -528,16 +562,19 @@ app.post('/api/drivers/location', async (req, res) => {
   }
 });
 
-app.get('/api/drivers/location', async (req, res) => {
+app.get('/api/drivers/location', authenticateToken, async (req, res) => {
   try {
+    // Get driver ID from JWT token or use fallback
+    const driverId = req.user?.driverId || 1;
+    
     // Get current location from database
     const result = await db.query(`
       SELECT latitude, longitude, accuracy, address, speed, heading, timestamp
       FROM driver_locations
-      WHERE driver_id = 1
+      WHERE driver_id = $1
       ORDER BY timestamp DESC
       LIMIT 1
-    `);
+    `, [driverId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -559,16 +596,19 @@ app.get('/api/drivers/location', async (req, res) => {
   }
 });
 
-app.get('/api/drivers/location/history', async (req, res) => {
+app.get('/api/drivers/location/history', authenticateToken, async (req, res) => {
   try {
+    // Get driver ID from JWT token or use fallback
+    const driverId = req.user?.driverId || 1;
     const { days = 7 } = req.query;
+    
     const result = await db.query(`
       SELECT latitude, longitude, address, speed, heading, timestamp
       FROM location_history
-      WHERE driver_id = 1
+      WHERE driver_id = $1
         AND timestamp > NOW() - INTERVAL '${parseInt(days)} days'
       ORDER BY timestamp DESC
-    `);
+    `, [driverId]);
 
     res.json({
       success: true,
@@ -584,52 +624,124 @@ app.get('/api/drivers/location/history', async (req, res) => {
 });
 
 // LOG ROUTES
-app.get('/api/logs', async (req, res) => {
+app.get('/api/logs', authenticateToken, async (req, res) => {
   try {
+    // Get driver ID from JWT token or use fallback
+    const driverId = req.user?.driverId || 1;
+    
+    // Try to get real logs from database first
+    const result = await db.query(`
+      SELECT 
+        le.id,
+        st.code as status,
+        le.start_time,
+        le.end_time,
+        le.timestamp,
+        le.location,
+        le.notes
+      FROM log_entries le
+      LEFT JOIN status_types st ON le.status_id = st.id
+      WHERE le.driver_id = $1
+      ORDER BY le.timestamp DESC
+      LIMIT 10
+    `, [driverId]);
+
+    if (result.rows.length > 0) {
+      // Return real database logs
+      res.json({
+        success: true,
+        logs: result.rows.map(log => ({
+          id: log.id,
+          status: log.status || 'off_duty',
+          start_time: log.start_time,
+          end_time: log.end_time,
+          timestamp: log.timestamp,
+          location: log.location || 'Unknown Location',
+          notes: log.notes || ''
+        }))
+      });
+    } else {
+      // Fallback to mock data for existing users
   res.json({
     success: true,
     logs: [
       {
         id: 1,
         status: 'driving',
-          start_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-          end_time: null, // Current status
-          timestamp: new Date().toISOString(),
-          location: 'New Delhi, India',
-          notes: 'On route to Mumbai'
-        },
-        {
-          id: 2,
-          status: 'on_duty',
-          start_time: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // 4 hours ago
-          end_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          location: 'Delhi Transport Hub',
-          notes: 'Loading cargo'
+            start_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            end_time: null,
+            timestamp: new Date().toISOString(),
+            location: 'New Delhi, India',
+            notes: 'On route to Mumbai'
+          },
+          {
+            id: 2,
+            status: 'on_duty',
+            start_time: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+            end_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            location: 'Delhi Transport Hub',
+            notes: 'Loading cargo'
       }
     ]
   });
+    }
   } catch (error) {
+    console.error('Logs fetch error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-app.post('/api/logs/status', async (req, res) => {
+app.post('/api/logs/status', authenticateToken, async (req, res) => {
   try {
     const { status, location, notes } = req.body;
     
-  res.json({
-    success: true,
+    // Get driver ID from JWT token or use fallback
+    const driverId = req.user?.driverId || 1;
+    
+    // Get status type ID
+    const statusResult = await db.query(
+      'SELECT id FROM status_types WHERE code = $1',
+      [status.toUpperCase()]
+    );
+    
+    if (statusResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status type'
+      });
+    }
+    
+    const statusId = statusResult.rows[0].id;
+    
+    // End current active log entry
+    await db.query(`
+      UPDATE log_entries 
+      SET end_time = NOW() 
+      WHERE driver_id = $1 AND end_time IS NULL
+    `, [driverId]);
+    
+    // Create new log entry
+    const logResult = await db.query(`
+      INSERT INTO log_entries (
+        driver_id, status_id, start_time, location, notes, latitude, longitude
+      ) VALUES ($1, $2, NOW(), $3, $4, 0, 0)
+      RETURNING id
+    `, [driverId, statusId, location || 'Unknown Location', notes || '']);
+    
+    res.json({
+      success: true,
       message: 'Status updated successfully',
-    log: {
-      id: Date.now(),
-      status,
+      log: {
+        id: logResult.rows[0].id,
+        status,
         location,
         notes,
-      timestamp: new Date().toISOString()
-    }
-  });
+        timestamp: new Date().toISOString()
+      }
+    });
   } catch (error) {
+    console.error('Status update error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
