@@ -515,7 +515,7 @@ app.get('/api/drivers/location', (req, res) => {
 // Basic admin routes (using database)
 app.get('/api/admin/drivers/active', async (req, res) => {
   try {
-    const [drivers] = await db.query(`
+    const result = await db.query(`
       SELECT 
         d.id,
         d.full_name,
@@ -524,19 +524,32 @@ app.get('/api/admin/drivers/active', async (req, res) => {
         d.license_state,
         c.name as carrier_name,
         t.unit_number as truck_number,
-        'OFF_DUTY' as current_status,
-        TRUE as is_online
+        dl.latitude,
+        dl.longitude,
+        dl.address as last_location,
+        dl.speed,
+        dl.heading,
+        dl.timestamp as last_location_update,
+        CASE 
+          WHEN dl.speed > 0 THEN 'driving'
+          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'on_duty'
+          ELSE 'off_duty'
+        END as current_status,
+        CASE 
+          WHEN dl.timestamp > NOW() - INTERVAL '1 hour' THEN TRUE
+          ELSE FALSE
+        END as is_online
       FROM drivers d
       LEFT JOIN carriers c ON d.carrier_id = c.id
-      LEFT JOIN driver_truck_assignments dta ON d.id = dta.driver_id AND dta.is_active = TRUE
-      LEFT JOIN trucks t ON dta.truck_id = t.id
+      LEFT JOIN trucks t ON t.carrier_id = c.id
+      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
       WHERE d.is_active = TRUE
       ORDER BY d.full_name
     `);
 
     res.json({
       success: true,
-      drivers: drivers || []
+      drivers: result.rows || []
     });
   } catch (error) {
     console.error('Error fetching active drivers:', error);
@@ -549,7 +562,7 @@ app.get('/api/admin/drivers/active', async (req, res) => {
 
 app.get('/api/admin/fleet/stats', async (req, res) => {
   try {
-    const [stats] = await db.query(`
+    const result = await db.query(`
       SELECT 
         COUNT(*) as total_drivers,
         COUNT(CASE 
@@ -567,14 +580,14 @@ app.get('/api/admin/fleet/stats', async (req, res) => {
       WHERE d.is_active = TRUE
     `);
 
-    const result = stats[0];
+    const stats = result.rows[0];
     res.json({
       success: true,
       stats: {
-        totalDrivers: parseInt(result.total_drivers),
-        activeNow: parseInt(result.active_now),
-        onDuty: parseInt(result.on_duty),
-        driving: parseInt(result.driving)
+        totalDrivers: parseInt(stats.total_drivers),
+        activeNow: parseInt(stats.active_now),
+        onDuty: parseInt(stats.on_duty),
+        driving: parseInt(stats.driving)
       }
     });
   } catch (error) {
@@ -839,71 +852,11 @@ app.get('/api/inspections/roadside-data', async (req, res) => {
 });
 
 // Admin routes
-app.get('/api/admin/drivers/active', async (req, res) => {
-  try {
-    const [drivers] = await db.query(`
-      SELECT 
-        d.id,
-        d.full_name,
-        d.username,
-        d.email,
-        d.license_number,
-        d.license_state,
-        c.name as carrier_name,
-        t.unit_number as truck_number,
-        dl.latitude,
-        dl.longitude,
-        dl.address as last_location,
-        dl.speed,
-        dl.heading,
-        dl.timestamp as last_location_update,
-        CASE 
-          WHEN dl.speed > 0 THEN 'driving'
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'on_duty'
-          ELSE 'off_duty'
-        END as status
-      FROM drivers d
-      LEFT JOIN carriers c ON d.carrier_id = c.id
-      LEFT JOIN trucks t ON t.carrier_id = c.id
-      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
-      WHERE d.is_active = TRUE
-      ORDER BY d.full_name
-    `);
-
-    res.json({
-      success: true,
-      drivers: drivers.map(driver => ({
-        id: driver.id,
-        full_name: driver.full_name,
-        username: driver.username,
-        email: driver.email,
-        license_number: driver.license_number,
-        license_state: driver.license_state,
-        carrier_name: driver.carrier_name,
-        truck_number: driver.truck_number,
-        status: driver.status,
-        last_location: driver.last_location,
-        latitude: driver.latitude,
-        longitude: driver.longitude,
-        speed: driver.speed,
-        heading: driver.heading,
-        last_location_update: driver.last_location_update
-      }))
-    });
-  } catch (error) {
-    console.error('Admin drivers active error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
-    });
-  }
-});
 
 
 app.get('/api/admin/drivers/live-locations', async (req, res) => {
   try {
-    const [drivers] = await db.query(`
+    const result = await db.query(`
       SELECT 
         d.id,
         d.full_name as name,
@@ -930,7 +883,7 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
 
     res.json({
       success: true,
-      drivers: drivers.map(driver => ({
+      drivers: result.rows.map(driver => ({
         id: driver.id,
         name: driver.name,
         username: driver.username,
