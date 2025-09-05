@@ -31,6 +31,26 @@ app.use(express.urlencoded({ extended: true }));
 
 // Database connection will be used instead of mock data
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'TruckLog Pro API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'TruckLog Pro API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
 // Auth routes
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
@@ -479,6 +499,276 @@ app.use('*', (req, res) => {
       '/api/logs'
     ]
   });
+});
+
+// Driver routes
+app.get('/api/drivers/profile', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      driver: {
+        id: 2,
+        name: "Saksham Panjla",
+        username: "saksham",
+        email: "saksham@example.com",
+        license_number: "DL123456",
+        license_state: "PB",
+        carrier_name: "Test Carrier",
+        truck_number: "007"
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/drivers/weekly-summary', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      summary: {
+        hoursThisWeek: 0,
+        daysWorked: 0,
+        dailyAverage: 0,
+        remainingHours: 70,
+        driveTimeRemaining: 11,
+        dutyTimeRemaining: 14
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/drivers/cycle-info', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      cycle: {
+        type: "70/8",
+        driveTimeRemaining: 11,
+        dutyTimeRemaining: 14,
+        cycleStart: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/drivers/location', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      location: {
+        latitude: 30.7020099,
+        longitude: 76.7275171,
+        accuracy: 14.227999687194824,
+        address: "Mohali, IN-PB",
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/api/drivers/location', async (req, res) => {
+  try {
+    const locationData = req.body;
+    console.log('📍 Location update received:', locationData);
+    res.json({
+      success: true,
+      message: 'Location updated successfully',
+      location: locationData
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Logs routes
+app.get('/api/logs', async (req, res) => {
+  try {
+    const { date } = req.query;
+    res.json({
+      success: true,
+      logs: [],
+      date: date || new Date().toISOString().split('T')[0]
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/logs/summary/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    res.json({
+      success: true,
+      summary: {
+        date: date,
+        totalHours: 0,
+        driveTime: 0,
+        dutyTime: 0,
+        offDutyTime: 0,
+        sleeperTime: 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/api/logs/status', async (req, res) => {
+  try {
+    const statusData = req.body;
+    console.log('📊 Status change received:', statusData);
+    res.json({
+      success: true,
+      message: 'Status updated successfully',
+      status: statusData
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Violations routes
+app.get('/api/violations/summary', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      summary: {
+        totalViolations: 0,
+        unresolvedViolations: 0,
+        criticalViolations: 0,
+        violations: []
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/violations', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      violations: []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Inspections routes
+app.get('/api/inspections', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      inspections: []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/inspections/roadside-data', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      roadsideData: {
+        inspectionTypes: ['Level 1', 'Level 2', 'Level 3'],
+        violations: [],
+        notes: ''
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Admin routes
+app.get('/api/admin/drivers/active', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      drivers: [
+        {
+          id: 2,
+          full_name: "Saksham Panjla",
+          username: "saksham",
+          email: "saksham@example.com",
+          license_number: "DL123456",
+          license_state: "PB",
+          carrier_name: "Test Carrier",
+          truck_number: "007",
+          status: "on_duty",
+          last_location: {
+            latitude: 30.7020099,
+            longitude: 76.7275171,
+            address: "Mohali, IN-PB"
+          }
+        }
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/admin/fleet/stats', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      stats: {
+        totalDrivers: 5,
+        activeDrivers: 1,
+        onDutyDrivers: 1,
+        drivingDrivers: 0,
+        violations: 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/admin/drivers/live-locations', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      drivers: [
+        {
+          id: 2,
+          name: "Saksham Panjla",
+          username: "saksham",
+          truck_number: "007",
+          latitude: "30.7020099",
+          longitude: "76.7275171",
+          accuracy: 14.609,
+          heading: 0,
+          speed: 0,
+          location_timestamp: new Date().toISOString()
+        }
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/admin/drivers/:id/location-history', async (req, res) => {
+  try {
+    const { id } = req.params;
+    res.json({
+      success: true,
+      locations: []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
