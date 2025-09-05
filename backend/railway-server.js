@@ -788,11 +788,11 @@ app.get('/api/admin/drivers/active', async (req, res) => {
         t.vin as truck_vin,
         
         -- Current status information
-        CASE 
-          WHEN dl.speed > 0 THEN 'DRIVING'
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'ON_DUTY'
-          ELSE 'OFF_DUTY'
-        END as current_status,
+        UPPER(CASE 
+          WHEN dl.speed > 0 THEN 'driving'
+          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'on_duty'
+          ELSE 'off_duty'
+        END) as current_status,
         
         -- Real location data from driver_locations table
         dl.latitude,
@@ -926,11 +926,11 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
         dl.timestamp as last_update,
         
         -- Current status
-        CASE 
-          WHEN dl.speed > 0 THEN 'DRIVING'
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'ON_DUTY'
-          ELSE 'OFF_DUTY'
-        END as current_status,
+        UPPER(CASE 
+          WHEN dl.speed > 0 THEN 'driving'
+          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'on_duty'
+          ELSE 'off_duty'
+        END) as current_status,
          
         -- Check if online (updated within last 1 hour)
         CASE 
@@ -955,7 +955,22 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
 
     res.json({
       success: true,
-      drivers: driversWithLocation || []
+      drivers: driversWithLocation.map(driver => ({
+        id: driver.id,
+        name: driver.name,
+        username: driver.username,
+        truck_number: driver.truck_number,
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        accuracy: driver.accuracy,
+        heading: driver.heading,
+        speed: driver.speed,
+        location: driver.location,
+        last_update: driver.last_update,
+        last_location_update: driver.last_update,
+        current_status: driver.current_status,
+        is_online: driver.is_online
+      })) || []
     });
 
   } catch (error) {
