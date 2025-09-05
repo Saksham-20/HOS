@@ -31,6 +31,103 @@ app.use(express.urlencoded({ extended: true }));
 
 // Database connection will be used instead of mock data
 
+// Mock data for demonstration with Indian drivers
+const mockDrivers = [
+  {
+    id: 1,
+    name: "Rajesh Kumar",
+    username: "rajesh",
+    email: "rajesh@example.com",
+    license_number: "DL01AB1234",
+    license_state: "DL",
+    carrier_name: "Delhi Transport Co.",
+    truck_number: "DL-01-AB-1234",
+    status: "driving",
+    current_location: {
+      latitude: 28.6139,
+      longitude: 77.2090,
+      address: "New Delhi, India"
+    }
+  },
+  {
+    id: 2,
+    name: "Saksham Panjla",
+    username: "saksham",
+    email: "saksham@example.com",
+    license_number: "PB02CD5678",
+    license_state: "PB",
+    carrier_name: "Punjab Logistics",
+    truck_number: "PB-02-CD-5678",
+    status: "on_duty",
+    current_location: {
+      latitude: 30.7020,
+      longitude: 76.7275,
+      address: "Mohali, Punjab, India"
+    }
+  },
+  {
+    id: 3,
+    name: "Priya Sharma",
+    username: "priya",
+    email: "priya@example.com",
+    license_number: "MH03EF9012",
+    license_state: "MH",
+    carrier_name: "Mumbai Cargo",
+    truck_number: "MH-03-EF-9012",
+    status: "off_duty",
+    current_location: {
+      latitude: 19.0760,
+      longitude: 72.8777,
+      address: "Mumbai, Maharashtra, India"
+    }
+  },
+  {
+    id: 4,
+    name: "Amit Singh",
+    username: "amit",
+    email: "amit@example.com",
+    license_number: "KA04GH3456",
+    license_state: "KA",
+    carrier_name: "Bangalore Freight",
+    truck_number: "KA-04-GH-3456",
+    status: "sleeper",
+    current_location: {
+      latitude: 12.9716,
+      longitude: 77.5946,
+      address: "Bangalore, Karnataka, India"
+    }
+  },
+  {
+    id: 5,
+    name: "Sunita Patel",
+    username: "sunita",
+    email: "sunita@example.com",
+    license_number: "GJ05IJ7890",
+    license_state: "GJ",
+    carrier_name: "Gujarat Transport",
+    truck_number: "GJ-05-IJ-7890",
+    status: "driving",
+    current_location: {
+      latitude: 23.0225,
+      longitude: 72.5714,
+      address: "Ahmedabad, Gujarat, India"
+    }
+  }
+];
+
+// Route data for demonstration (Rajesh Kumar's route from Delhi to Mumbai)
+const mockRoute = [
+  { latitude: 28.6139, longitude: 77.2090, address: "New Delhi, India", timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString() },
+  { latitude: 28.4595, longitude: 77.0266, address: "Gurgaon, Haryana, India", timestamp: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString() },
+  { latitude: 28.2041, longitude: 76.7754, address: "Rewari, Haryana, India", timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
+  { latitude: 27.4924, longitude: 76.5961, address: "Alwar, Rajasthan, India", timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() },
+  { latitude: 26.4499, longitude: 74.6399, address: "Ajmer, Rajasthan, India", timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString() },
+  { latitude: 25.2138, longitude: 75.8648, address: "Kota, Rajasthan, India", timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
+  { latitude: 24.5854, longitude: 73.7123, address: "Udaipur, Rajasthan, India", timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
+  { latitude: 23.2599, longitude: 77.4126, address: "Bhopal, Madhya Pradesh, India", timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString() },
+  { latitude: 19.0760, longitude: 72.8777, address: "Mumbai, Maharashtra, India", timestamp: new Date().toISOString() }
+];
+
 // Root route
 app.get('/', (req, res) => {
   res.json({
@@ -66,12 +163,14 @@ app.post('/api/auth/login', async (req, res) => {
     // Always use fallback for now to ensure login works
     console.log('🔧 Using fallback authentication for driver login');
     
-    // Fallback to hardcoded users for testing
+    // Fallback to hardcoded users for testing - includes all Indian drivers
     const fallbackUsers = [
-      { username: 'testdriver', password: '123456789', fullName: 'Test Driver', licenseNumber: 'D123456789', licenseState: 'CA', carrierName: 'Test Carrier', truckNumber: 'TRUCK001' },
-      { username: 'saksham', password: '123456789', fullName: 'Saksham Panjla', licenseNumber: 'D987654321', licenseState: 'TX', carrierName: 'Test Carrier', truckNumber: 'TRUCK002' },
-      { username: 'nishant', password: '123456789', fullName: 'Nishant Kumar', licenseNumber: 'D456789123', licenseState: 'FL', carrierName: 'Test Carrier', truckNumber: 'TRUCK003' },
-      { username: 'testuser', password: '123456789', fullName: 'Test User', licenseNumber: 'D789123456', licenseState: 'NY', carrierName: 'Test Carrier', truckNumber: 'TRUCK004' }
+      { username: 'rajesh', password: '123456789', fullName: 'Rajesh Kumar', licenseNumber: 'DL01AB1234', licenseState: 'DL', carrierName: 'Delhi Transport Co.', truckNumber: 'DL-01-AB-1234' },
+      { username: 'saksham', password: '123456789', fullName: 'Saksham Panjla', licenseNumber: 'PB02CD5678', licenseState: 'PB', carrierName: 'Punjab Logistics', truckNumber: 'PB-02-CD-5678' },
+      { username: 'priya', password: '123456789', fullName: 'Priya Sharma', licenseNumber: 'MH03EF9012', licenseState: 'MH', carrierName: 'Mumbai Cargo', truckNumber: 'MH-03-EF-9012' },
+      { username: 'amit', password: '123456789', fullName: 'Amit Singh', licenseNumber: 'KA04GH3456', licenseState: 'KA', carrierName: 'Bangalore Freight', truckNumber: 'KA-04-GH-3456' },
+      { username: 'sunita', password: '123456789', fullName: 'Sunita Patel', licenseNumber: 'GJ05IJ7890', licenseState: 'GJ', carrierName: 'Gujarat Transport', truckNumber: 'GJ-05-IJ-7890' },
+      { username: 'admin', password: 'admin123', fullName: 'Admin User', licenseNumber: 'ADMIN001', licenseState: 'ADMIN', carrierName: 'Admin', truckNumber: 'ADMIN' }
     ];
     
     const user = fallbackUsers.find(u => u.username === username && u.password === password);
@@ -504,17 +603,19 @@ app.use('*', (req, res) => {
 // Driver routes
 app.get('/api/drivers/profile', async (req, res) => {
   try {
+    // Get driver from mock data (default to saksham)
+    const driver = mockDrivers.find(d => d.username === 'saksham') || mockDrivers[1];
     res.json({
       success: true,
       driver: {
-        id: 2,
-        name: "Saksham Panjla",
-        username: "saksham",
-        email: "saksham@example.com",
-        license_number: "DL123456",
-        license_state: "PB",
-        carrier_name: "Test Carrier",
-        truck_number: "007"
+        id: driver.id,
+        name: driver.name,
+        username: driver.username,
+        email: driver.email,
+        license_number: driver.license_number,
+        license_state: driver.license_state,
+        carrier_name: driver.carrier_name,
+        truck_number: driver.truck_number
       }
     });
   } catch (error) {
@@ -694,24 +795,18 @@ app.get('/api/admin/drivers/active', async (req, res) => {
   try {
     res.json({
       success: true,
-      drivers: [
-        {
-          id: 2,
-          full_name: "Saksham Panjla",
-          username: "saksham",
-          email: "saksham@example.com",
-          license_number: "DL123456",
-          license_state: "PB",
-          carrier_name: "Test Carrier",
-          truck_number: "007",
-          status: "on_duty",
-          last_location: {
-            latitude: 30.7020099,
-            longitude: 76.7275171,
-            address: "Mohali, IN-PB"
-          }
-        }
-      ]
+      drivers: mockDrivers.map(driver => ({
+        id: driver.id,
+        full_name: driver.name,
+        username: driver.username,
+        email: driver.email,
+        license_number: driver.license_number,
+        license_state: driver.license_state,
+        carrier_name: driver.carrier_name,
+        truck_number: driver.truck_number,
+        status: driver.status,
+        last_location: driver.current_location
+      }))
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
@@ -720,13 +815,17 @@ app.get('/api/admin/drivers/active', async (req, res) => {
 
 app.get('/api/admin/fleet/stats', async (req, res) => {
   try {
+    const activeDrivers = mockDrivers.filter(d => d.status !== 'off_duty').length;
+    const onDutyDrivers = mockDrivers.filter(d => d.status === 'on_duty').length;
+    const drivingDrivers = mockDrivers.filter(d => d.status === 'driving').length;
+    
     res.json({
       success: true,
       stats: {
-        totalDrivers: 5,
-        activeDrivers: 1,
-        onDutyDrivers: 1,
-        drivingDrivers: 0,
+        totalDrivers: mockDrivers.length,
+        activeDrivers: activeDrivers,
+        onDutyDrivers: onDutyDrivers,
+        drivingDrivers: drivingDrivers,
         violations: 0
       }
     });
@@ -739,20 +838,18 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
   try {
     res.json({
       success: true,
-      drivers: [
-        {
-          id: 2,
-          name: "Saksham Panjla",
-          username: "saksham",
-          truck_number: "007",
-          latitude: "30.7020099",
-          longitude: "76.7275171",
-          accuracy: 14.609,
-          heading: 0,
-          speed: 0,
-          location_timestamp: new Date().toISOString()
-        }
-      ]
+      drivers: mockDrivers.map(driver => ({
+        id: driver.id,
+        name: driver.name,
+        username: driver.username,
+        truck_number: driver.truck_number,
+        latitude: driver.current_location.latitude.toString(),
+        longitude: driver.current_location.longitude.toString(),
+        accuracy: 14.609,
+        heading: Math.floor(Math.random() * 360),
+        speed: driver.status === 'driving' ? Math.floor(Math.random() * 60) + 20 : 0,
+        location_timestamp: new Date().toISOString()
+      }))
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
@@ -762,9 +859,28 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
 app.get('/api/admin/drivers/:id/location-history', async (req, res) => {
   try {
     const { id } = req.params;
+    const driverId = parseInt(id);
+    
+    // Show route for Rajesh Kumar (id: 1), empty for others
+    let locations = [];
+    if (driverId === 1) {
+      locations = mockRoute;
+    } else {
+      // For other drivers, show their current location as history
+      const driver = mockDrivers.find(d => d.id === driverId);
+      if (driver) {
+        locations = [{
+          latitude: driver.current_location.latitude,
+          longitude: driver.current_location.longitude,
+          address: driver.current_location.address,
+          timestamp: new Date().toISOString()
+        }];
+      }
+    }
+    
     res.json({
       success: true,
-      locations: []
+      locations: locations
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
