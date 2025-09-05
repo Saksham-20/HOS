@@ -199,13 +199,13 @@ app.post('/api/auth/login', async (req, res) => {
   
   try {
     // Try database authentication first
-    const [drivers] = await db.query(
+    const result = await db.query(
       'SELECT id, username, password_hash, full_name, license_number, license_state, email FROM drivers WHERE username = $1',
       [username]
     );
 
-    if (drivers && drivers.length > 0) {
-      const driver = drivers[0];
+    if (result.rows && result.rows.length > 0) {
+      const driver = result.rows[0];
       
       // Check password
       const isValidPassword = await bcrypt.compare(password, driver.password_hash);
