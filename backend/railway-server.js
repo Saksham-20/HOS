@@ -822,7 +822,24 @@ app.get('/api/admin/drivers/active', async (req, res) => {
 
     res.json({
       success: true,
-      drivers: result.rows || []
+      drivers: result.rows.map(driver => ({
+        id: driver.id,
+        full_name: driver.full_name,
+        username: driver.username,
+        license_number: driver.license_number,
+        license_state: driver.license_state,
+        carrier_name: driver.carrier_name,
+        truck_number: driver.truck_number,
+        location: driver.last_location,
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        speed: driver.speed,
+        heading: driver.heading,
+        last_update: driver.last_location_update,
+        current_status: driver.current_status,
+        is_online: driver.is_online,
+        odometer: 123456 // Mock odometer reading
+      })) || []
     });
   } catch (error) {
     console.error('Error fetching active drivers:', error);
@@ -858,9 +875,10 @@ app.get('/api/admin/fleet/stats', async (req, res) => {
       success: true,
       stats: {
         totalDrivers: parseInt(stats.total_drivers),
-        activeNow: parseInt(stats.active_now),
-        onDuty: parseInt(stats.on_duty),
-        driving: parseInt(stats.driving)
+        activeDrivers: parseInt(stats.active_now),
+        onDutyDrivers: parseInt(stats.on_duty),
+        drivingDrivers: parseInt(stats.driving),
+        violations: 0 // Mock violations count
       }
     });
   } catch (error) {
