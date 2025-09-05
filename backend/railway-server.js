@@ -204,7 +204,7 @@ app.post('/api/auth/login', async (req, res) => {
       [username]
     );
 
-    if (drivers.length > 0) {
+    if (drivers && drivers.length > 0) {
       const driver = drivers[0];
       
       // Check password
