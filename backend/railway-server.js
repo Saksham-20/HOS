@@ -173,9 +173,17 @@ app.post('/api/auth/login', async (req, res) => {
       { username: 'admin', password: 'admin123', fullName: 'Admin User', licenseNumber: 'ADMIN001', licenseState: 'ADMIN', carrierName: 'Admin', truckNumber: 'ADMIN' }
     ];
     
-    const user = fallbackUsers.find(u => u.username === username && u.password === password);
+    const user = fallbackUsers.find(u => u.username === username);
     
     if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // For fallback users, check password directly (since they're not hashed in the array)
+    if (user.password !== password) {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
