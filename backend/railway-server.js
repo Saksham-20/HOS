@@ -776,7 +776,7 @@ app.put('/api/violations/:id/resolve', async (req, res) => {
 app.get('/api/admin/drivers/active', async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT 
+      SELECT DISTINCT
         d.id,
         d.full_name,
         d.username,
@@ -909,7 +909,7 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
     console.log('📍 Fetching live driver locations...');
     
     const result = await db.query(`
-      SELECT 
+      SELECT DISTINCT
         d.id,
         d.full_name as name,
         d.username,
