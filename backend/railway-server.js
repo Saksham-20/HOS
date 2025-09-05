@@ -329,8 +329,8 @@ app.post('/api/auth/register', async (req, res) => {
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
       // Create driver
       const [driverResult] = await connection.query(
         `INSERT INTO drivers (
@@ -343,9 +343,9 @@ app.post('/api/auth/register', async (req, res) => {
       const driverId = driverResult.rows[0].id;
 
       await connection.commit();
-
-      res.status(201).json({
-        success: true,
+    
+    res.status(201).json({
+      success: true,
         message: 'Driver registered successfully',
         driverId
       });
@@ -415,68 +415,26 @@ app.get('/api/drivers/profile', async (req, res) => {
     
     const result = await db.query(`
       SELECT 
-        d.id,
-        d.full_name as name,
-        d.username,
-        d.email,
-        d.license_number,
-        d.license_state,
-        c.name as carrier_name,
-        t.unit_number as truck_number,
-        c.dot_number,
-        dl.latitude,
-        dl.longitude,
-        dl.address as current_location,
-        dl.speed,
-        dl.heading,
-        dl.timestamp as last_location_update
-      FROM drivers d
-      LEFT JOIN carriers c ON d.carrier_id = c.id
-      LEFT JOIN trucks t ON t.carrier_id = c.id
-      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
-      WHERE d.id = $1 AND d.is_active = TRUE
+        d.id, d.username, d.full_name, d.email,
+        d.license_number, d.license_state,
+        c.name as carrier_name, c.dot_number,
+        t.unit_number as truck_number, t.vin as truck_vin
+       FROM drivers d
+       LEFT JOIN carriers c ON d.carrier_id = c.id
+       LEFT JOIN trucks t ON t.carrier_id = c.id
+       WHERE d.id = $1 AND d.is_active = TRUE
     `, [driverId]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Driver not found'
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Driver not found' 
       });
     }
 
-    const driver = result.rows[0];
-    res.json({
-      success: true,
-      driver: {
-        id: driver.id,
-        name: driver.name,
-        username: driver.username,
-        email: driver.email,
-        license: driver.license_number,
-        license_number: driver.license_number,
-        license_state: driver.license_state,
-        carrier: driver.carrier_name,
-        carrier_name: driver.carrier_name,
-        truck: driver.truck_number,
-        truck_number: driver.truck_number,
-        dot_number: driver.dot_number,
-        current_location: driver.current_location,
-        location: driver.current_location,
-        latitude: driver.latitude,
-        longitude: driver.longitude,
-        speed: driver.speed,
-        heading: driver.heading,
-        last_location_update: driver.last_location_update,
-        last_update: driver.last_location_update
-      }
-    });
+    res.json({ success: true, driver: result.rows[0] });
   } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -599,12 +557,12 @@ app.get('/api/drivers/location/history', async (req, res) => {
 // LOG ROUTES
 app.get('/api/logs', async (req, res) => {
   try {
-    res.json({
-      success: true,
-      logs: [
-        {
-          id: 1,
-          status: 'driving',
+  res.json({
+    success: true,
+    logs: [
+      {
+        id: 1,
+        status: 'driving',
           start_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
           end_time: null, // Current status
           timestamp: new Date().toISOString(),
@@ -619,9 +577,9 @@ app.get('/api/logs', async (req, res) => {
           timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
           location: 'Delhi Transport Hub',
           notes: 'Loading cargo'
-        }
-      ]
-    });
+      }
+    ]
+  });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -631,17 +589,17 @@ app.post('/api/logs/status', async (req, res) => {
   try {
     const { status, location, notes } = req.body;
     
-    res.json({
-      success: true,
+  res.json({
+    success: true,
       message: 'Status updated successfully',
-      log: {
-        id: Date.now(),
-        status,
+    log: {
+      id: Date.now(),
+      status,
         location,
         notes,
-        timestamp: new Date().toISOString()
-      }
-    });
+      timestamp: new Date().toISOString()
+    }
+  });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -652,17 +610,17 @@ app.put('/api/logs/:id', async (req, res) => {
     const { id } = req.params;
     const { status, location, notes } = req.body;
     
-    res.json({
-      success: true,
+  res.json({
+    success: true,
       message: 'Log updated successfully',
       log: {
         id: parseInt(id),
         status,
         location,
         notes,
-        timestamp: new Date().toISOString()
-      }
-    });
+      timestamp: new Date().toISOString()
+    }
+  });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -742,17 +700,17 @@ app.post('/api/inspections', async (req, res) => {
   try {
     const { type, items } = req.body;
     
-    res.json({
-      success: true,
+  res.json({
+    success: true,
       message: 'Inspection created successfully',
       inspection: {
         id: Date.now(),
         type,
         items,
         status: 'completed',
-        timestamp: new Date().toISOString()
-      }
-    });
+      timestamp: new Date().toISOString()
+    }
+  });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -818,29 +776,52 @@ app.put('/api/violations/:id/resolve', async (req, res) => {
 app.get('/api/admin/drivers/active', async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT DISTINCT
+      SELECT 
         d.id,
         d.full_name,
         d.username,
+        d.email,
         d.license_number,
         d.license_state,
         c.name as carrier_name,
         t.unit_number as truck_number,
+        t.vin as truck_vin,
+        
+        -- Current status information
+        CASE 
+          WHEN dl.speed > 0 THEN 'DRIVING'
+          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'ON_DUTY'
+          ELSE 'OFF_DUTY'
+        END as current_status,
+        
+        -- Real location data from driver_locations table
         dl.latitude,
         dl.longitude,
-        dl.address as last_location,
-        dl.speed,
+        dl.accuracy,
+        dl.altitude,
         dl.heading,
+        dl.speed,
+        dl.address as location,
         dl.timestamp as last_location_update,
+        
+        -- Odometer (mock for now)
+        123456 as odometer,
+        
+        -- Last activity
+        COALESCE(dl.timestamp, NOW() - INTERVAL '1 day') as last_update,
+        
+        -- Today's hours calculation (mock)
+        8.5 as duty_hours,
+        
+        -- Violation count (mock)
+        0 as violations_count,
+         
+        -- Check if driver is online (location updated within last 5 minutes)
         CASE 
-          WHEN dl.speed > 0 THEN 'driving'
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'on_duty'
-          ELSE 'off_duty'
-        END as current_status,
-        CASE 
-          WHEN dl.timestamp > NOW() - INTERVAL '1 hour' THEN TRUE
-          ELSE FALSE
+          WHEN dl.timestamp > NOW() - INTERVAL '5 minutes' THEN TRUE 
+          ELSE FALSE 
         END as is_online
+        
       FROM drivers d
       LEFT JOIN carriers c ON d.carrier_id = c.id
       LEFT JOIN trucks t ON t.carrier_id = c.id
@@ -849,124 +830,139 @@ app.get('/api/admin/drivers/active', async (req, res) => {
       ORDER BY d.full_name
     `);
 
-    res.json({
-      success: true,
-      drivers: result.rows.map(driver => ({
-        id: driver.id,
-        full_name: driver.full_name,
-        username: driver.username,
-        license_number: driver.license_number,
-        license_state: driver.license_state,
-        carrier_name: driver.carrier_name,
-        truck_number: driver.truck_number,
-        location: driver.last_location,
-        latitude: driver.latitude,
-        longitude: driver.longitude,
-        speed: driver.speed,
-        heading: driver.heading,
-        last_update: driver.last_location_update,
-        current_status: driver.current_status,
-        is_online: driver.is_online,
-        odometer: 123456 // Mock odometer reading
-      })) || []
+    res.json({ 
+      success: true, 
+      drivers: result.rows || []
     });
   } catch (error) {
     console.error('Error fetching active drivers:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch drivers'
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch drivers' 
     });
   }
 });
 
 app.get('/api/admin/fleet/stats', async (req, res) => {
   try {
+    console.log('📊 Fetching fleet statistics...');
+    
     const result = await db.query(`
       SELECT 
-        COUNT(*) as total_drivers,
-        COUNT(CASE 
-          WHEN dl.speed > 0 THEN 1
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 1
-        END) as active_now,
-        COUNT(CASE 
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 1
-        END) as on_duty,
-        COUNT(CASE 
-          WHEN dl.speed > 0 THEN 1
-        END) as driving
-      FROM drivers d
-      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
-      WHERE d.is_active = TRUE
+        (SELECT COUNT(*) FROM drivers WHERE is_active = TRUE) as total_drivers,
+        
+        (SELECT COUNT(DISTINCT d.id)
+         FROM drivers d
+         JOIN driver_locations dl ON d.id = dl.driver_id
+         WHERE d.is_active = TRUE 
+         AND dl.timestamp >= NOW() - INTERVAL '1 HOUR') as active_drivers,
+        
+        (SELECT COUNT(DISTINCT d.id)
+         FROM drivers d
+         JOIN driver_locations dl ON d.id = dl.driver_id
+         WHERE d.is_active = TRUE 
+         AND dl.speed = 0 
+         AND dl.timestamp >= NOW() - INTERVAL '1 HOUR') as on_duty_drivers,
+        
+        (SELECT COUNT(DISTINCT d.id)
+         FROM drivers d
+         JOIN driver_locations dl ON d.id = dl.driver_id
+         WHERE d.is_active = TRUE 
+         AND dl.speed > 0) as driving_drivers,
+        
+        (SELECT COUNT(*) 
+         FROM violations 
+         WHERE is_resolved = FALSE) as violations
     `);
 
-    const stats = result.rows[0];
-    res.json({
-      success: true,
-      stats: {
-        totalDrivers: parseInt(stats.total_drivers),
-        activeDrivers: parseInt(stats.active_now),
-        onDutyDrivers: parseInt(stats.on_duty),
-        drivingDrivers: parseInt(stats.driving),
-        violations: 0 // Mock violations count
-      }
+    const rawStats = result.rows[0] || {
+      total_drivers: 0,
+      active_drivers: 0,
+      on_duty_drivers: 0,
+      driving_drivers: 0,
+      violations: 0
+    };
+
+    // Convert snake_case to camelCase for frontend compatibility
+    const fleetStats = {
+      totalDrivers: rawStats.total_drivers,
+      activeDrivers: rawStats.active_drivers,
+      onDutyDrivers: rawStats.on_duty_drivers,
+      drivingDrivers: rawStats.driving_drivers,
+      violations: rawStats.violations
+    };
+
+    console.log('📊 Fleet stats:', fleetStats);
+
+    res.json({ 
+      success: true, 
+      stats: fleetStats
     });
   } catch (error) {
     console.error('Error fetching fleet stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch fleet statistics'
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch fleet statistics' 
     });
   }
 });
 
 app.get('/api/admin/drivers/live-locations', async (req, res) => {
   try {
+    console.log('📍 Fetching live driver locations...');
+    
     const result = await db.query(`
-      SELECT DISTINCT
+      SELECT 
         d.id,
         d.full_name as name,
         d.username,
         t.unit_number as truck_number,
         dl.latitude,
         dl.longitude,
-        dl.speed,
-        dl.heading,
         dl.accuracy,
-        dl.timestamp as location_timestamp,
+        dl.heading,
+        dl.speed,
+        dl.address as location,
+        dl.timestamp as last_update,
+        
+        -- Current status
         CASE 
-          WHEN dl.speed > 0 THEN 'driving'
-          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'on_duty'
-          ELSE 'off_duty'
-        END as status
+          WHEN dl.speed > 0 THEN 'DRIVING'
+          WHEN dl.speed = 0 AND dl.timestamp > NOW() - INTERVAL '1 hour' THEN 'ON_DUTY'
+          ELSE 'OFF_DUTY'
+        END as current_status,
+         
+        -- Check if online (updated within last 1 hour)
+        CASE 
+          WHEN dl.timestamp > NOW() - INTERVAL '1 HOUR' THEN TRUE 
+          ELSE FALSE 
+        END as is_online
+        
       FROM drivers d
       LEFT JOIN carriers c ON d.carrier_id = c.id
       LEFT JOIN trucks t ON t.carrier_id = c.id
       LEFT JOIN driver_locations dl ON d.id = dl.driver_id
-      WHERE d.is_active = TRUE AND dl.latitude IS NOT NULL AND dl.longitude IS NOT NULL
-      ORDER BY d.full_name
+      WHERE d.is_active = TRUE
+      ORDER BY dl.timestamp DESC
     `);
+
+    console.log(`📍 Found ${result.rows.length} drivers with location data`);
+
+    // Filter out drivers without location data for the response
+    const driversWithLocation = result.rows.filter(driver => 
+      driver.latitude !== null && driver.longitude !== null
+    );
 
     res.json({
       success: true,
-      drivers: result.rows.map(driver => ({
-        id: driver.id,
-        name: driver.name,
-        username: driver.username,
-        truck_number: driver.truck_number,
-        latitude: driver.latitude.toString(),
-        longitude: driver.longitude.toString(),
-        accuracy: driver.accuracy || 14.609,
-        heading: driver.heading || 0,
-        speed: driver.speed || 0,
-        location_timestamp: driver.location_timestamp
-      }))
+      drivers: driversWithLocation || []
     });
+
   } catch (error) {
-    console.error('Live locations error:', error);
+    console.error('Error fetching live locations:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
+      message: 'Failed to fetch live locations' 
     });
   }
 });
@@ -1048,8 +1044,8 @@ app.get('/api/admin/drivers/:id/location-history', async (req, res) => {
       LIMIT 100
     `, [driverId]);
 
-    res.json({
-      success: true,
+  res.json({ 
+    success: true, 
       locations: result.rows
     });
   } catch (error) {
@@ -1066,8 +1062,8 @@ app.post('/api/admin/drivers/:id/message', async (req, res) => {
     const { id } = req.params;
     const { message } = req.body;
     
-    res.json({
-      success: true,
+  res.json({
+    success: true,
       message: 'Message sent successfully',
       driverId: parseInt(id),
       sentMessage: message
@@ -1138,8 +1134,8 @@ app.use((err, req, res, next) => {
 
 // SAFE 404 handler
 app.use((req, res, next) => {
-  res.status(404).json({
-    success: false,
+  res.status(404).json({ 
+    success: false, 
     message: `Route ${req.originalUrl} not found`,
     availableRoutes: [
       '/api/health',
