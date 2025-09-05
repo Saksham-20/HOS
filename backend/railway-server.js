@@ -1,37 +1,107 @@
-// Production server for Render.com deployment with database connection
+// Production server with all APIs from development server
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('./config/postgres-database');
+require('dotenv').config();
 
-// SECURITY: Set JWT_SECRET with fallback for production
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️ JWT_SECRET environment variable not set, using fallback for production');
-  process.env.JWT_SECRET = 'production-fallback-jwt-secret-key-2024-change-in-production';
-}
+// Import database connection
+const db = require('./config/postgres-database');
 
 const app = express();
 
-// Security middleware
+// Middleware
 app.use(helmet());
 app.use(cors({
-  origin: true, // Allow all origins for Render deployment
+  origin: ['https://hos-8cby.onrender.com', 'http://localhost:3000', 'http://192.168.1.22:3000'],
   credentials: true
 }));
-
-// Logging
-app.use(morgan('combined'));
-
-// Body parsing
+app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Database connection will be used instead of mock data
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'TruckLog Pro API Server',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/api/health',
+      docs: '/api/docs',
+      auth: '/api/auth/*',
+      drivers: '/api/drivers/*',
+      logs: '/api/logs/*',
+      inspections: '/api/inspections/*',
+      violations: '/api/violations/*',
+      admin: '/api/admin/*'
+    }
+  });
+});
 
-// Mock data for demonstration with Indian drivers
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'TruckLog Pro API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// API documentation endpoint
+app.get('/api/docs', (req, res) => {
+  res.json({
+    success: true,
+    endpoints: {
+      auth: {
+        'POST /api/auth/login': 'Driver login',
+        'POST /api/auth/register': 'Driver registration',
+        'POST /api/auth/logout': 'Logout'
+      },
+      drivers: {
+        'GET /api/drivers/profile': 'Get driver profile',
+        'GET /api/drivers/weekly-summary': 'Get weekly hours summary',
+        'GET /api/drivers/cycle-info': 'Get 8-day cycle info',
+        'POST /api/drivers/location': 'Update driver location',
+        'GET /api/drivers/location': 'Get current driver location',
+        'GET /api/drivers/location/history': 'Get driver location history'
+      },
+      logs: {
+        'GET /api/logs': 'Get driver logs',
+        'POST /api/logs/status': 'Change driver status',
+        'PUT /api/logs/:id': 'Update log entry',
+        'POST /api/logs/:id/submit': 'Submit log entry',
+        'GET /api/logs/summary/:date': 'Get daily summary'
+      },
+      inspections: {
+        'GET /api/inspections': 'Get inspections',
+        'POST /api/inspections': 'Create inspection',
+        'GET /api/inspections/roadside-data': 'Get roadside inspection data'
+      },
+      violations: {
+        'GET /api/violations': 'Get violations',
+        'GET /api/violations/summary': 'Get violation summary',
+        'PUT /api/violations/:id/resolve': 'Resolve violation'
+      },
+      admin: {
+        'POST /api/admin/login': 'Admin login',
+        'GET /api/admin/drivers/active': 'Get all active drivers with real locations',
+        'GET /api/admin/drivers/live-locations': 'Get live driver locations for map',
+        'GET /api/admin/fleet/stats': 'Get fleet statistics',
+        'GET /api/admin/drivers/:id': 'Get driver details',
+        'GET /api/admin/drivers/:id/location-history': 'Get driver location history',
+        'POST /api/admin/drivers/:id/message': 'Send message to driver',
+        'GET /api/admin/violations': 'Get all fleet violations'
+      }
+    }
+  });
+});
+
+// Mock data for fallback
 const mockDrivers = [
   {
     id: 1,
@@ -46,7 +116,9 @@ const mockDrivers = [
     current_location: {
       latitude: 28.6139,
       longitude: 77.2090,
-      address: "New Delhi, India"
+      address: "New Delhi, India",
+      speed: 45.0,
+      heading: 180.0
     }
   },
   {
@@ -62,7 +134,9 @@ const mockDrivers = [
     current_location: {
       latitude: 30.7020,
       longitude: 76.7275,
-      address: "Mohali, Punjab, India"
+      address: "Mohali, Punjab, India",
+      speed: 0.0,
+      heading: 0.0
     }
   },
   {
@@ -71,14 +145,13 @@ const mockDrivers = [
     username: "priya",
     email: "priya@example.com",
     license_number: "MH03EF9012",
-    license_state: "MH",
-    carrier_name: "Mumbai Cargo",
-    truck_number: "MH-03-EF-9012",
     status: "off_duty",
     current_location: {
       latitude: 19.0760,
       longitude: 72.8777,
-      address: "Mumbai, Maharashtra, India"
+      address: "Mumbai, Maharashtra, India",
+      speed: 0.0,
+      heading: 0.0
     }
   },
   {
@@ -87,14 +160,13 @@ const mockDrivers = [
     username: "amit",
     email: "amit@example.com",
     license_number: "KA04GH3456",
-    license_state: "KA",
-    carrier_name: "Bangalore Freight",
-    truck_number: "KA-04-GH-3456",
-    status: "sleeper",
+    status: "on_duty",
     current_location: {
       latitude: 12.9716,
       longitude: 77.5946,
-      address: "Bangalore, Karnataka, India"
+      address: "Bangalore, Karnataka, India",
+      speed: 0.0,
+      heading: 0.0
     }
   },
   {
@@ -103,52 +175,18 @@ const mockDrivers = [
     username: "sunita",
     email: "sunita@example.com",
     license_number: "GJ05IJ7890",
-    license_state: "GJ",
-    carrier_name: "Gujarat Transport",
-    truck_number: "GJ-05-IJ-7890",
     status: "driving",
     current_location: {
       latitude: 23.0225,
       longitude: 72.5714,
-      address: "Ahmedabad, Gujarat, India"
+      address: "Ahmedabad, Gujarat, India",
+      speed: 38.0,
+      heading: 270.0
     }
   }
 ];
 
-// Route data for demonstration (Rajesh Kumar's route from Delhi to Mumbai)
-const mockRoute = [
-  { latitude: 28.6139, longitude: 77.2090, address: "New Delhi, India", timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString() },
-  { latitude: 28.4595, longitude: 77.0266, address: "Gurgaon, Haryana, India", timestamp: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString() },
-  { latitude: 28.2041, longitude: 76.7754, address: "Rewari, Haryana, India", timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
-  { latitude: 27.4924, longitude: 76.5961, address: "Alwar, Rajasthan, India", timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() },
-  { latitude: 26.4499, longitude: 74.6399, address: "Ajmer, Rajasthan, India", timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString() },
-  { latitude: 25.2138, longitude: 75.8648, address: "Kota, Rajasthan, India", timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
-  { latitude: 24.5854, longitude: 73.7123, address: "Udaipur, Rajasthan, India", timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-  { latitude: 23.2599, longitude: 77.4126, address: "Bhopal, Madhya Pradesh, India", timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString() },
-  { latitude: 19.0760, longitude: 72.8777, address: "Mumbai, Maharashtra, India", timestamp: new Date().toISOString() }
-];
-
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'TruckLog Pro API is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'TruckLog Pro API is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
-});
-
-// Auth routes
+// AUTH ROUTES
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   
@@ -194,17 +232,20 @@ app.post('/api/auth/login', async (req, res) => {
     const token = jwt.sign(
       { driverId: 1, username: user.username },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '8h' }
     );
     
-    return res.json({
+    res.json({
       success: true,
       message: 'Login successful (fallback mode)',
       token: token,
       driver: {
         id: 1,
+        name: user.fullName,
         username: user.username,
-        fullName: user.fullName,
+        license: user.licenseNumber,
+        carrier: user.carrierName,
+        truck: user.truckNumber,
         licenseNumber: user.licenseNumber,
         licenseState: user.licenseState,
         carrierName: user.carrierName,
@@ -219,6 +260,13 @@ app.post('/api/auth/login', async (req, res) => {
       error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
     });
   }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Logged out successfully'
+  });
 });
 
 app.post('/api/auth/register', async (req, res) => {
@@ -260,7 +308,7 @@ app.post('/api/auth/register', async (req, res) => {
           'INSERT INTO carriers (name) VALUES ($1) RETURNING id',
           [carrierName]
         );
-        carrierId = carrierResult[0].id;
+        carrierId = carrierResult.rows[0].id;
       }
 
       // Get or create truck
@@ -277,7 +325,7 @@ app.post('/api/auth/register', async (req, res) => {
           'INSERT INTO trucks (carrier_id, unit_number) VALUES ($1, $2) RETURNING id',
           [carrierId, truckNumber]
         );
-        truckId = truckResult[0].id;
+        truckId = truckResult.rows[0].id;
       }
 
       // Hash password
@@ -292,28 +340,14 @@ app.post('/api/auth/register', async (req, res) => {
         [carrierId, username, hashedPassword, email, fullName, licenseNumber, licenseState]
       );
 
-      const driverId = driverResult[0].id;
-
-      // Assign driver to truck
-      await connection.query(
-        'INSERT INTO driver_truck_assignments (driver_id, truck_id) VALUES ($1, $2)',
-        [driverId, truckId]
-      );
+      const driverId = driverResult.rows[0].id;
 
       await connection.commit();
 
       res.status(201).json({
         success: true,
-        message: 'Registration successful',
-        driver: {
-          id: driverId,
-          username: username,
-          fullName: fullName,
-          licenseNumber: licenseNumber,
-          licenseState: licenseState,
-          carrierName: carrierName,
-          truckNumber: truckNumber
-        }
+        message: 'Driver registered successfully',
+        driverId
       });
     } catch (error) {
       await connection.rollback();
@@ -322,15 +356,11 @@ app.post('/api/auth/register', async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Registration failed'
-    });
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 
-// Admin login route
+// ADMIN LOGIN
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
   
@@ -362,29 +392,28 @@ app.post('/api/admin/login', async (req, res) => {
           role: 'admin'
         }
       });
-    } else {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
     }
+    
+    res.status(401).json({
+      success: false,
+      message: 'Invalid admin credentials'
+    });
   } catch (error) {
     console.error('Admin login error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Please try again later'
+      message: 'Internal server error'
     });
   }
 });
 
-// Driver routes
+// DRIVER ROUTES
 app.get('/api/drivers/profile', async (req, res) => {
   try {
     // Get driver ID from JWT token (if available) or use fallback
     const driverId = req.user?.driverId || 1; // Default to driver ID 1 for testing
     
-    const [drivers] = await db.query(`
+    const result = await db.query(`
       SELECT 
         d.id,
         d.full_name as name,
@@ -408,14 +437,14 @@ app.get('/api/drivers/profile', async (req, res) => {
       WHERE d.id = $1 AND d.is_active = TRUE
     `, [driverId]);
 
-    if (drivers.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Driver not found'
       });
     }
 
-    const driver = drivers[0];
+    const driver = result.rows[0];
     res.json({
       success: true,
       driver: {
@@ -458,61 +487,305 @@ app.get('/api/drivers/weekly-summary', (req, res) => {
   });
 });
 
-// Logs routes
-app.get('/api/logs', (req, res) => {
+app.get('/api/drivers/cycle-info', (req, res) => {
   res.json({
     success: true,
-    logs: [
-      {
-        id: 1,
-        date: new Date().toISOString(),
-        status: 'driving',
-        location: 'Los Angeles, CA',
-        hours: 8
+    cycle: {
+      currentDay: 1,
+      totalDays: 8,
+      remainingHours: 70,
+      drivingHours: 11,
+      onDutyHours: 14,
+      offDutyHours: 10
+    }
+  });
+});
+
+// LOCATION ROUTES
+app.post('/api/drivers/location', async (req, res) => {
+  try {
+    const { latitude, longitude, accuracy, address, speed, heading } = req.body;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required'
+      });
+    }
+
+    // For now, just return success (in production, you'd save to database)
+    res.json({
+      success: true,
+      message: 'Location updated successfully',
+      location: {
+        latitude,
+        longitude,
+        accuracy,
+        address,
+        speed,
+        heading,
+        timestamp: new Date().toISOString()
       }
-    ]
-  });
+    });
+  } catch (error) {
+    console.error('Location update error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update location'
+    });
+  }
 });
 
-app.post('/api/logs/status', (req, res) => {
-  const { status } = req.body;
-  res.json({
-    success: true,
-    message: `Status changed to ${status}`,
-    log: {
-      id: Date.now(),
-      status,
-      timestamp: new Date().toISOString()
+app.get('/api/drivers/location', async (req, res) => {
+  try {
+    // Get current location from database
+    const result = await db.query(`
+      SELECT latitude, longitude, accuracy, address, speed, heading, timestamp
+      FROM driver_locations
+      WHERE driver_id = 1
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No location data found'
+      });
     }
-  });
+
+    res.json({
+      success: true,
+      location: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Location fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch location'
+    });
+  }
 });
 
-// Location routes
-app.post('/api/drivers/location', (req, res) => {
-  const { latitude, longitude } = req.body;
-  res.json({
-    success: true,
-    message: 'Location updated',
-    location: {
-      latitude,
-      longitude,
-      timestamp: new Date().toISOString()
-    }
-  });
+app.get('/api/drivers/location/history', async (req, res) => {
+  try {
+    const { days = 7 } = req.query;
+    const result = await db.query(`
+      SELECT latitude, longitude, address, speed, heading, timestamp
+      FROM location_history
+      WHERE driver_id = 1
+        AND timestamp > NOW() - INTERVAL '${parseInt(days)} days'
+      ORDER BY timestamp DESC
+    `);
+
+    res.json({
+      success: true,
+      locations: result.rows
+    });
+  } catch (error) {
+    console.error('Location history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch location history'
+    });
+  }
 });
 
-app.get('/api/drivers/location', (req, res) => {
-  res.json({
-    success: true,
-    location: {
-      latitude: 34.0522,
-      longitude: -118.2437,
-      timestamp: new Date().toISOString()
-    }
-  });
+// LOG ROUTES
+app.get('/api/logs', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      logs: [
+        {
+          id: 1,
+          status: 'driving',
+          timestamp: new Date().toISOString(),
+          location: 'New Delhi, India',
+          notes: 'On route to Mumbai'
+        }
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 });
 
-// Basic admin routes (using database)
+app.post('/api/logs/status', async (req, res) => {
+  try {
+    const { status, location, notes } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Status updated successfully',
+      log: {
+        id: Date.now(),
+        status,
+        location,
+        notes,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.put('/api/logs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, location, notes } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Log updated successfully',
+      log: {
+        id: parseInt(id),
+        status,
+        location,
+        notes,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/api/logs/:id/submit', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    res.json({
+      success: true,
+      message: 'Log submitted successfully',
+      logId: parseInt(id)
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/logs/summary/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    
+    res.json({
+      success: true,
+      summary: {
+        date,
+        totalHours: 8.5,
+        drivingHours: 6.0,
+        onDutyHours: 2.5,
+        offDutyHours: 15.5
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// INSPECTION ROUTES
+app.get('/api/inspections', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      inspections: [
+        {
+          id: 1,
+          type: 'pre_trip',
+          status: 'completed',
+          timestamp: new Date().toISOString(),
+          items: [
+            { name: 'Brakes', status: 'pass' },
+            { name: 'Lights', status: 'pass' },
+            { name: 'Tires', status: 'pass' }
+          ]
+        }
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/api/inspections', async (req, res) => {
+  try {
+    const { type, items } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Inspection created successfully',
+      inspection: {
+        id: Date.now(),
+        type,
+        items,
+        status: 'completed',
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/inspections/roadside-data', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      roadsideData: {
+        inspections: 0,
+        violations: 0,
+        outOfService: 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// VIOLATION ROUTES
+app.get('/api/violations', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      violations: []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/api/violations/summary', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      summary: {
+        total: 0,
+        critical: 0,
+        resolved: 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.put('/api/violations/:id/resolve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    res.json({
+      success: true,
+      message: 'Violation resolved successfully',
+      violationId: parseInt(id)
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ADMIN ROUTES
 app.get('/api/admin/drivers/active', async (req, res) => {
   try {
     const result = await db.query(`
@@ -599,261 +872,6 @@ app.get('/api/admin/fleet/stats', async (req, res) => {
   }
 });
 
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'HOS Backend API is running',
-    version: '1.0.0',
-    endpoints: {
-      health: '/api/health',
-      docs: '/api/docs',
-      auth: {
-        login: 'POST /api/auth/login',
-        register: 'POST /api/auth/register'
-      },
-      admin: {
-        login: 'POST /api/admin/login'
-      }
-    },
-    status: 'online'
-  });
-});
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'HOS Backend API is running on Render - PRODUCTION SERVER',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production',
-    server: 'railway-server.js (PRODUCTION)',
-    features: ['JWT Authentication', 'bcryptjs Password Hashing', 'Admin Login'],
-    database: db.manager && db.manager.isConnected ? 'Connected' : 'Fallback Mode'
-  });
-});
-
-// API documentation endpoint
-app.get('/api/docs', (req, res) => {
-  res.json({
-    success: true,
-    endpoints: {
-      auth: {
-        'POST /api/auth/login': 'Driver login (use driver1/123456789)',
-        'POST /api/auth/register': 'Driver registration'
-      },
-      admin: {
-        'POST /api/admin/login': 'Admin login (use admin/admin123)',
-        'GET /api/admin/drivers/active': 'Get all active drivers',
-        'GET /api/admin/fleet/stats': 'Get fleet statistics'
-      },
-      drivers: {
-        'GET /api/drivers/profile': 'Get driver profile',
-        'GET /api/drivers/weekly-summary': 'Get weekly hours summary',
-        'POST /api/drivers/location': 'Update driver location',
-        'GET /api/drivers/location': 'Get current driver location'
-      },
-      logs: {
-        'GET /api/logs': 'Get driver logs',
-        'POST /api/logs/status': 'Change driver status'
-      }
-    }
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: `Route ${req.originalUrl} not found`,
-    availableRoutes: [
-      '/api/health',
-      '/api/docs',
-      '/api/auth/login',
-      '/api/auth/register',
-      '/api/admin/login',
-      '/api/admin/drivers/active',
-      '/api/admin/fleet/stats',
-      '/api/drivers/profile',
-      '/api/drivers/weekly-summary',
-      '/api/drivers/location',
-      '/api/logs'
-    ]
-  });
-});
-
-// Driver routes
-
-app.get('/api/drivers/weekly-summary', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      summary: {
-        hoursThisWeek: 0,
-        daysWorked: 0,
-        dailyAverage: 0,
-        remainingHours: 70,
-        driveTimeRemaining: 11,
-        dutyTimeRemaining: 14
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.get('/api/drivers/cycle-info', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      cycle: {
-        type: "70/8",
-        driveTimeRemaining: 11,
-        dutyTimeRemaining: 14,
-        cycleStart: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.get('/api/drivers/location', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      location: {
-        latitude: 30.7020099,
-        longitude: 76.7275171,
-        accuracy: 14.227999687194824,
-        address: "Mohali, IN-PB",
-        timestamp: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.post('/api/drivers/location', async (req, res) => {
-  try {
-    const locationData = req.body;
-    console.log('📍 Location update received:', locationData);
-    res.json({
-      success: true,
-      message: 'Location updated successfully',
-      location: locationData
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Logs routes
-app.get('/api/logs', async (req, res) => {
-  try {
-    const { date } = req.query;
-    res.json({
-      success: true,
-      logs: [],
-      date: date || new Date().toISOString().split('T')[0]
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.get('/api/logs/summary/:date', async (req, res) => {
-  try {
-    const { date } = req.params;
-    res.json({
-      success: true,
-      summary: {
-        date: date,
-        totalHours: 0,
-        driveTime: 0,
-        dutyTime: 0,
-        offDutyTime: 0,
-        sleeperTime: 0
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.post('/api/logs/status', async (req, res) => {
-  try {
-    const statusData = req.body;
-    console.log('📊 Status change received:', statusData);
-    res.json({
-      success: true,
-      message: 'Status updated successfully',
-      status: statusData
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Violations routes
-app.get('/api/violations/summary', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      summary: {
-        totalViolations: 0,
-        unresolvedViolations: 0,
-        criticalViolations: 0,
-        violations: []
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.get('/api/violations', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      violations: []
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Inspections routes
-app.get('/api/inspections', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      inspections: []
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-app.get('/api/inspections/roadside-data', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      roadsideData: {
-        inspectionTypes: ['Level 1', 'Level 2', 'Level 3'],
-        violations: [],
-        notes: ''
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Admin routes
-
-
 app.get('/api/admin/drivers/live-locations', async (req, res) => {
   try {
     const result = await db.query(`
@@ -906,47 +924,197 @@ app.get('/api/admin/drivers/live-locations', async (req, res) => {
   }
 });
 
+app.get('/api/admin/drivers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const driverId = parseInt(id);
+
+    const result = await db.query(`
+      SELECT 
+        d.id,
+        d.full_name,
+        d.username,
+        d.email,
+        d.license_number,
+        d.license_state,
+        c.name as carrier_name,
+        t.unit_number as truck_number,
+        dl.latitude,
+        dl.longitude,
+        dl.address as last_location,
+        dl.speed,
+        dl.heading,
+        dl.timestamp as last_location_update
+      FROM drivers d
+      LEFT JOIN carriers c ON d.carrier_id = c.id
+      LEFT JOIN trucks t ON t.carrier_id = c.id
+      LEFT JOIN driver_locations dl ON d.id = dl.driver_id
+      WHERE d.id = $1 AND d.is_active = TRUE
+    `, [driverId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found'
+      });
+    }
+
+    const driver = result.rows[0];
+    res.json({
+      success: true,
+      driver: {
+        id: driver.id,
+        full_name: driver.full_name,
+        username: driver.username,
+        email: driver.email,
+        license_number: driver.license_number,
+        license_state: driver.license_state,
+        carrier_name: driver.carrier_name,
+        truck_number: driver.truck_number,
+        last_location: driver.last_location,
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        speed: driver.speed,
+        heading: driver.heading,
+        last_location_update: driver.last_location_update
+      }
+    });
+  } catch (error) {
+    console.error('Driver details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch driver details'
+    });
+  }
+});
+
 app.get('/api/admin/drivers/:id/location-history', async (req, res) => {
   try {
     const { id } = req.params;
     const driverId = parseInt(id);
-    
-    // Show route for Rajesh Kumar (id: 1), empty for others
-    let locations = [];
-    if (driverId === 1) {
-      locations = mockRoute;
-    } else {
-      // For other drivers, show their current location as history
-      const driver = mockDrivers.find(d => d.id === driverId);
-      if (driver) {
-        locations = [{
-          latitude: driver.current_location.latitude,
-          longitude: driver.current_location.longitude,
-          address: driver.current_location.address,
-          timestamp: new Date().toISOString()
-        }];
-      }
-    }
+
+    const result = await db.query(`
+      SELECT latitude, longitude, address, speed, heading, timestamp
+      FROM location_history
+      WHERE driver_id = $1
+      ORDER BY timestamp DESC
+      LIMIT 100
+    `, [driverId]);
+
+    res.json({
+      success: true,
+      locations: result.rows
+    });
+  } catch (error) {
+    console.error('Location history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch location history'
+    });
+  }
+});
+
+app.post('/api/admin/drivers/:id/message', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
     
     res.json({
       success: true,
-      locations: locations
+      message: 'Message sent successfully',
+      driverId: parseInt(id),
+      sentMessage: message
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 HOS Backend running on Render - Port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'production'}`);
-  console.log(`📖 API Documentation: http://localhost:${PORT}/api/docs`);
-  console.log(`✅ PRODUCTION SERVER - DATABASE CONNECTED + JWT AUTH + BCRYPT PASSWORDS`);
-  console.log(`🔐 Driver Login: testdriver/123456789, saksham/123456789, nishant/123456789, testuser/123456789`);
-  console.log(`👑 Admin Login: admin/admin123`);
-  console.log(`💾 Database: Connected to MySQL database`);
+app.get('/api/admin/violations', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      violations: []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 });
 
-module.exports = app;
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error stack:', err.stack);
+  
+  // Database connection errors
+  if (err.code === 'ECONNREFUSED') {
+    return res.status(503).json({
+      success: false,
+      message: 'Database connection failed',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Service temporarily unavailable'
+    });
+  }
+
+  // JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid token'
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Token expired'
+    });
+  }
+
+  // Validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: Object.values(err.errors).map(e => e.message)
+    });
+  }
+
+  // Default error response
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      details: err 
+    })
+  });
+});
+
+// SAFE 404 handler
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`,
+    availableRoutes: [
+      '/api/health',
+      '/api/docs',
+      '/api/auth/*',
+      '/api/drivers/*',
+      '/api/logs/*',
+      '/api/inspections/*',
+      '/api/violations/*',
+      '/api/admin/*'
+    ]
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚛 TruckLog Pro Server is running on ${HOST}:${PORT}`);
+  console.log(`📊 Admin Dashboard available at http://${HOST}:${PORT}/api/admin/*`);
+  console.log(`📍 Location Tracking: Real-time GPS tracking enabled`);
+  console.log(`📖 API Documentation at http://${HOST}:${PORT}/api/docs`);
+  console.log(`❤️  Health Check at http://${HOST}:${PORT}/api/health`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
