@@ -280,31 +280,29 @@ app.post('/api/auth/register', async (req, res) => {
   }
   
   try {
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
-
-    try {
+    // Use the PostgreSQL manager's transaction method
+    const result = await db.manager.transaction(async (client) => {
       // Check if username exists
-      const [existingUser] = await connection.query(
+      const existingUserResult = await client.query(
         'SELECT id FROM drivers WHERE username = $1',
         [username]
       );
 
-      if (existingUser.length > 0) {
+      if (existingUserResult.rows.length > 0) {
         throw new Error('Username already exists');
       }
 
       // Get or create carrier
       let carrierId;
-      const [carriers] = await connection.query(
+      const carriersResult = await client.query(
         'SELECT id FROM carriers WHERE name = $1',
         [carrierName]
       );
 
-      if (carriers.length > 0) {
-        carrierId = carriers[0].id;
+      if (carriersResult.rows.length > 0) {
+        carrierId = carriersResult.rows[0].id;
       } else {
-        const [carrierResult] = await connection.query(
+        const carrierResult = await client.query(
           'INSERT INTO carriers (name) VALUES ($1) RETURNING id',
           [carrierName]
         );
@@ -313,15 +311,15 @@ app.post('/api/auth/register', async (req, res) => {
 
       // Get or create truck
       let truckId;
-      const [trucks] = await connection.query(
+      const trucksResult = await client.query(
         'SELECT id FROM trucks WHERE unit_number = $1 AND carrier_id = $2',
         [truckNumber, carrierId]
       );
 
-      if (trucks.length > 0) {
-        truckId = trucks[0].id;
+      if (trucksResult.rows.length > 0) {
+        truckId = trucksResult.rows[0].id;
       } else {
-        const [truckResult] = await connection.query(
+        const truckResult = await client.query(
           'INSERT INTO trucks (carrier_id, unit_number) VALUES ($1, $2) RETURNING id',
           [carrierId, truckNumber]
         );
@@ -329,10 +327,10 @@ app.post('/api/auth/register', async (req, res) => {
       }
 
       // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
       // Create driver
-      const [driverResult] = await connection.query(
+      const driverResult = await client.query(
         `INSERT INTO drivers (
           carrier_id, username, password_hash, email, 
           full_name, license_number, license_state
@@ -340,21 +338,14 @@ app.post('/api/auth/register', async (req, res) => {
         [carrierId, username, hashedPassword, email, fullName, licenseNumber, licenseState]
       );
 
-      const driverId = driverResult.rows[0].id;
+      return driverResult.rows[0].id;
+    });
 
-      await connection.commit();
-    
     res.status(201).json({
       success: true,
-        message: 'Driver registered successfully',
-        driverId
-      });
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
+      message: 'Driver registered successfully',
+      driverId: result
+    });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -854,14 +845,14 @@ app.get('/api/admin/fleet/stats', async (req, res) => {
          FROM drivers d
          JOIN driver_locations dl ON d.id = dl.driver_id
          WHERE d.is_active = TRUE 
-         AND dl.timestamp >= NOW() - INTERVAL '1 HOUR') as active_drivers,
+         AND dl.timestamp >= NOW() - INTERVAL '24 HOURS') as active_drivers,
         
         (SELECT COUNT(DISTINCT d.id)
          FROM drivers d
          JOIN driver_locations dl ON d.id = dl.driver_id
          WHERE d.is_active = TRUE 
          AND dl.speed = 0 
-         AND dl.timestamp >= NOW() - INTERVAL '1 HOUR') as on_duty_drivers,
+         AND dl.timestamp >= NOW() - INTERVAL '24 HOURS') as on_duty_drivers,
         
         (SELECT COUNT(DISTINCT d.id)
          FROM drivers d
