@@ -198,7 +198,45 @@ app.post('/api/auth/login', async (req, res) => {
   }
   
   try {
-    // Always use fallback for now to ensure login works
+    // Try database authentication first
+    const [drivers] = await db.query(
+      'SELECT id, username, password_hash, full_name, license_number, license_state, email FROM drivers WHERE username = $1',
+      [username]
+    );
+
+    if (drivers.length > 0) {
+      const driver = drivers[0];
+      
+      // Check password
+      const isValidPassword = await bcrypt.compare(password, driver.password_hash);
+      
+      if (isValidPassword) {
+        // Generate JWT token
+        const token = jwt.sign(
+          { driverId: driver.id, username: driver.username },
+          process.env.JWT_SECRET,
+          { expiresIn: '8h' }
+        );
+        
+        res.json({
+          success: true,
+          message: 'Login successful',
+          token,
+          driver: {
+            id: driver.id,
+            name: driver.full_name,
+            username: driver.username,
+            email: driver.email,
+            license: driver.license_number,
+            licenseNumber: driver.license_number,
+            licenseState: driver.license_state
+          }
+        });
+        return;
+      }
+    }
+
+    // Fallback to hardcoded users for testing - includes all Indian drivers
     console.log('🔧 Using fallback authentication for driver login');
     
     // Fallback to hardcoded users for testing - includes all Indian drivers
