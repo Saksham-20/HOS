@@ -452,17 +452,22 @@ app.get('/api/drivers/profile', async (req, res) => {
         name: driver.name,
         username: driver.username,
         email: driver.email,
+        license: driver.license_number,
         license_number: driver.license_number,
         license_state: driver.license_state,
+        carrier: driver.carrier_name,
         carrier_name: driver.carrier_name,
+        truck: driver.truck_number,
         truck_number: driver.truck_number,
         dot_number: driver.dot_number,
         current_location: driver.current_location,
+        location: driver.current_location,
         latitude: driver.latitude,
         longitude: driver.longitude,
         speed: driver.speed,
         heading: driver.heading,
-        last_location_update: driver.last_location_update
+        last_location_update: driver.last_location_update,
+        last_update: driver.last_location_update
       }
     });
   } catch (error) {
@@ -600,9 +605,20 @@ app.get('/api/logs', async (req, res) => {
         {
           id: 1,
           status: 'driving',
+          start_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+          end_time: null, // Current status
           timestamp: new Date().toISOString(),
           location: 'New Delhi, India',
           notes: 'On route to Mumbai'
+        },
+        {
+          id: 2,
+          status: 'on_duty',
+          start_time: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // 4 hours ago
+          end_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          location: 'Delhi Transport Hub',
+          notes: 'Loading cargo'
         }
       ]
     });
@@ -693,9 +709,22 @@ app.get('/api/inspections', async (req, res) => {
       inspections: [
         {
           id: 1,
-          type: 'pre_trip',
-          status: 'completed',
+          type: 'Pre-Trip Inspection',
+          status: 'Completed',
+          date: new Date().toLocaleDateString(),
           timestamp: new Date().toISOString(),
+          items: [
+            { name: 'Brakes', status: 'pass' },
+            { name: 'Lights', status: 'pass' },
+            { name: 'Tires', status: 'pass' }
+          ]
+        },
+        {
+          id: 2,
+          type: 'Post-Trip Inspection',
+          status: 'Completed',
+          date: new Date(Date.now() - 24 * 60 * 60 * 1000).toLocaleDateString(),
+          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
           items: [
             { name: 'Brakes', status: 'pass' },
             { name: 'Lights', status: 'pass' },
