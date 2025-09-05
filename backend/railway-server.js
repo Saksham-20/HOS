@@ -798,7 +798,6 @@ app.get('/api/admin/drivers/active', async (req, res) => {
         dl.latitude,
         dl.longitude,
         dl.accuracy,
-        dl.altitude,
         dl.heading,
         dl.speed,
         dl.address as location,
@@ -870,9 +869,7 @@ app.get('/api/admin/fleet/stats', async (req, res) => {
          WHERE d.is_active = TRUE 
          AND dl.speed > 0) as driving_drivers,
         
-        (SELECT COUNT(*) 
-         FROM violations 
-         WHERE is_resolved = FALSE) as violations
+        0 as violations
     `);
 
     const rawStats = result.rows[0] || {
