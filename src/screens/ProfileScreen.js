@@ -43,10 +43,7 @@ const ProfileScreen = () => {
           style: 'destructive',
           onPress: async () => {
             await logout();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            });
+            // No navigation.reset: App.js switches to Login stack when isLoggedIn becomes false
           },
         },
       ]
@@ -100,7 +97,7 @@ const ProfileScreen = () => {
       >
         <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
           <View style={styles.avatarContainer}>
-            <Icon name="account-circle" size={80} color={theme.primary} />
+            <Icon name="account-circle" size={48} color={theme.primary} />
           </View>
           <ThemedText style={styles.name}>{state.driverInfo.name || 'Driver'}</ThemedText>
           <ThemedText secondary style={styles.username}>@{state.driverInfo.username}</ThemedText>

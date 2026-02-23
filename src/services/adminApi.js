@@ -1,9 +1,6 @@
 // src/services/adminApi.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = __DEV__ 
-  ? 'http://192.168.29.161:3000/api' // Development URL - Your current IP
-  : 'https://hos-8cby.onrender.com/api'; // Production URL - Render.com
+import { API_BASE_URL } from '../config/api';
 
 class AdminApiService {
   constructor() {

@@ -201,7 +201,7 @@ const AdminDashboardScreen = ({ navigation }) => {
           </View>
           <View style={styles.driverStatus}>
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(driver.current_status) }]}>
-              <Icon name={getStatusIcon(driver.current_status)} size={16} color="#ffffff" />
+              <Icon name={getStatusIcon(driver.current_status)} size={20} color="#ffffff" />
               <Text style={styles.statusText}>
                 {(driver.current_status || 'UNKNOWN').replace('_', ' ')}
               </Text>
@@ -214,19 +214,19 @@ const AdminDashboardScreen = ({ navigation }) => {
 
         <View style={styles.driverDetails}>
           <View style={styles.detailItem}>
-            <Icon name="location-on" size={16} color={theme.textTertiary} />
+            <Icon name="location-on" size={20} color={theme.textTertiary} />
             <Text style={[styles.detailText, { color: theme.textSecondary }]} numberOfLines={1}>
               {driver.location || 'Unknown location'}
             </Text>
           </View>
           <View style={styles.detailItem}>
-            <Icon name="speed" size={16} color={theme.textTertiary} />
+            <Icon name="speed" size={20} color={theme.textTertiary} />
             <Text style={[styles.detailText, { color: theme.textSecondary }]}>
               {driver.odometer || 0} mi
             </Text>
           </View>
           <View style={styles.detailItem}>
-            <Icon name="access-time" size={16} color={theme.textTertiary} />
+            <Icon name="access-time" size={20} color={theme.textTertiary} />
             <Text style={[styles.detailText, { color: theme.textSecondary }]}>
               {formatLastUpdate(driver.last_update)}
             </Text>
@@ -235,7 +235,7 @@ const AdminDashboardScreen = ({ navigation }) => {
 
         {driver.violations_count > 0 && (
           <View style={styles.violationAlert}>
-            <Icon name="warning" size={16} color="#ef4444" />
+            <Icon name="warning" size={20} color="#ef4444" />
             <Text style={styles.violationText}>
               {driver.violations_count} violation{driver.violations_count > 1 ? 's' : ''}
             </Text>
@@ -394,7 +394,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </Text>
                 {drivers.length === 0 ? (
                   <View style={styles.emptyState}>
-                    <Icon name="local-shipping" size={64} color={theme.textTertiary} />
+                    <Icon name="local-shipping" size={48} color={theme.textTertiary} />
                     <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
                       No active drivers found
                     </Text>
@@ -415,7 +415,7 @@ const AdminDashboardScreen = ({ navigation }) => {
               </Text>
               {stats.violations === 0 ? (
                 <View style={styles.emptyState}>
-                  <Icon name="check-circle" size={64} color={theme.success} />
+                  <Icon name="check-circle" size={48} color={theme.success} />
                   <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
                     No active violations
                   </Text>
@@ -512,7 +512,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                 <View style={styles.driverDetailItem}>
                   <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Status</Text>
                   <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedDriver.current_status) }]}>
-                    <Icon name={getStatusIcon(selectedDriver.current_status)} size={16} color="#ffffff" />
+                    <Icon name={getStatusIcon(selectedDriver.current_status)} size={20} color="#ffffff" />
                     <Text style={styles.statusText}>
                       {(selectedDriver.current_status || 'UNKNOWN').replace('_', ' ')}
                     </Text>

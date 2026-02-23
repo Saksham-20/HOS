@@ -13,42 +13,67 @@ class PostgreSQLManager {
   }
 
   initializePool() {
+    let config = {};
     try {
-      // Parse DATABASE_URL or use individual environment variables
-      let config;
-      
+      const sslOn = process.env.DB_SSL === 'true' || process.env.DB_SSL === '1';
+      const sslOff = process.env.DB_SSL === 'false' || process.env.DB_SSL === '0';
+      const host = process.env.DB_HOST || '127.0.0.1';
+      const isLocal = host === 'localhost' || host === '127.0.0.1';
+      const hasDatabaseUrl = !!process.env.DATABASE_URL;
+      const useSsl = sslOff
+        ? false
+        : sslOn || (hasDatabaseUrl ? true : !isLocal && process.env.NODE_ENV === 'production');
+      const sslOption = useSsl ? { rejectUnauthorized: false } : false;
+
       if (process.env.DATABASE_URL) {
-        // Parse DATABASE_URL (format: postgresql://user:password@host:port/database)
         config = {
           connectionString: process.env.DATABASE_URL,
-          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+          ssl: sslOption
         };
       } else {
-        // Use individual environment variables
         config = {
-          host: process.env.DB_HOST || 'localhost',
-          port: process.env.DB_PORT || 5432,
+          host,
+          port: parseInt(process.env.DB_PORT || '5432', 10),
           database: process.env.DB_NAME || 'trucklog_pro',
           user: process.env.DB_USER || 'postgres',
           password: process.env.DB_PASSWORD || 'postgres',
-          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+          ssl: sslOption
         };
       }
 
       this.pool = new Pool({
         ...config,
-        max: 20, // Maximum number of clients in the pool
-        idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-        connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       });
 
       this.setupPoolEventHandlers();
       this.testConnection();
-
     } catch (error) {
-      console.error('❌ Failed to initialize PostgreSQL pool:', error);
+      this.logConnectionError('Initialize pool', error, config);
       this.handleConnectionError(error);
     }
+  }
+
+  logConnectionError(phase, error, config = {}) {
+    const safeConfig = config && (config.host || config.connectionString)
+      ? {
+          host: config.host || '(from DATABASE_URL)',
+          port: config.port,
+          database: config.database,
+          user: config.user,
+        }
+      : {};
+    console.error(`❌ PostgreSQL ${phase} failed:`, error.message);
+    console.error('   Connection config:', JSON.stringify(safeConfig, null, 2));
+    if (error.code) console.error('   Error code:', error.code);
+    if (error.code === 'ECONNREFUSED') {
+      console.error('   → Is PostgreSQL running? Try: brew services start postgresql@16');
+      console.error('   → Test with: pg_isready -h 127.0.0.1 -p 5432 -U postgres');
+    }
+    if (error.code === '28P01') console.error('   → Check DB_USER and DB_PASSWORD in .env');
+    if (error.code === '3D000') console.error('   → Database missing. Create it: createdb trucklog_pro');
   }
 
   setupPoolEventHandlers() {
@@ -59,7 +84,7 @@ class PostgreSQLManager {
     });
 
     this.pool.on('error', (error) => {
-      console.error('❌ PostgreSQL pool error:', error);
+      this.logConnectionError('Pool error', error, this.pool?.options);
       this.isConnected = false;
       this.handleConnectionError(error);
     });
@@ -76,19 +101,17 @@ class PostgreSQLManager {
   async testConnection() {
     try {
       const client = await this.pool.connect();
-      console.log('✅ PostgreSQL connection test successful');
-      
-      // Test basic query
-      const result = await client.query('SELECT NOW() as test');
-      console.log('✅ PostgreSQL query test successful:', result.rows[0]);
-      
+      const result = await client.query('SELECT current_database() as db, current_user as user, NOW() as now');
       client.release();
       this.isConnected = true;
       this.reconnectAttempts = 0;
-      
+      console.log('✅ PostgreSQL connected:', result.rows[0]);
       return true;
     } catch (error) {
-      console.error('❌ PostgreSQL connection test failed:', error);
+      const config = this.pool?.options?.host
+        ? { host: this.pool.options.host, port: this.pool.options.port, database: this.pool.options.database, user: this.pool.options.user }
+        : {};
+      this.logConnectionError('Connection test', error, config);
       this.isConnected = false;
       this.handleConnectionError(error);
       return false;
@@ -183,6 +206,25 @@ class PostgreSQLManager {
         this.isConnected = false;
       } catch (error) {
         console.error('❌ Error closing PostgreSQL pool:', error);
+      }
+    }
+  }
+
+  /**
+   * Wait for DB to be reachable with retries (for startup fail-fast).
+   * @param {number} retries - Number of attempts
+   * @param {number} delayMs - Delay between attempts
+   * @returns {Promise<void>}
+   */
+  async waitForConnection(retries = 5, delayMs = 2000) {
+    for (let i = 0; i < retries; i++) {
+      const health = await this.healthCheck();
+      if (health.healthy) return;
+      if (i < retries - 1) {
+        console.log(`⏳ Database not ready, retrying in ${delayMs}ms (${i + 1}/${retries})...`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      } else {
+        throw new Error(`Database unreachable after ${retries} attempts: ${health.error || 'unknown'}`);
       }
     }
   }

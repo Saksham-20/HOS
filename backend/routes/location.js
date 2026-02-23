@@ -6,8 +6,6 @@ const { authMiddleware } = require('../middleware/auth'); // FIXED: Destructured
 
 const router = express.Router();
 
-console.log('📍 Location routes module loaded');
-
 // Update driver location - POST /location
 router.post('/location', authMiddleware, [
   body('latitude').isFloat({ min: -90, max: 90 }),
@@ -15,8 +13,6 @@ router.post('/location', authMiddleware, [
   body('timestamp').optional().isISO8601()
 ], async (req, res) => {
   try {
-    console.log('📍 POST /location called by driver:', req.driver.id);
-    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ success: false, errors: errors.array() });
@@ -35,25 +31,21 @@ router.post('/location', authMiddleware, [
 
     const locationTimestamp = timestamp ? new Date(timestamp) : new Date();
 
-    console.log(`📍 Updating location for driver ${req.driver.id}:`, {
-      latitude, longitude, accuracy, address
-    });
-
-    // Update or insert current location
+    // Upsert current location (Postgres: ON CONFLICT; one row per driver)
     await db.query(`
       INSERT INTO driver_locations (
-        driver_id, latitude, longitude, accuracy, altitude, 
+        driver_id, latitude, longitude, accuracy, altitude,
         heading, speed, address, timestamp
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        latitude = VALUES(latitude),
-        longitude = VALUES(longitude),
-        accuracy = VALUES(accuracy),
-        altitude = VALUES(altitude),
-        heading = VALUES(heading),
-        speed = VALUES(speed),
-        address = VALUES(address),
-        timestamp = VALUES(timestamp),
+      ON CONFLICT (driver_id) DO UPDATE SET
+        latitude = EXCLUDED.latitude,
+        longitude = EXCLUDED.longitude,
+        accuracy = EXCLUDED.accuracy,
+        altitude = EXCLUDED.altitude,
+        heading = EXCLUDED.heading,
+        speed = EXCLUDED.speed,
+        address = EXCLUDED.address,
+        timestamp = EXCLUDED.timestamp,
         updated_at = CURRENT_TIMESTAMP
     `, [
       req.driver.id, latitude, longitude, accuracy, altitude,
@@ -78,8 +70,6 @@ router.post('/location', authMiddleware, [
       WHERE driver_id = ? AND end_time IS NULL
     `, [latitude, longitude, accuracy, address, req.driver.id]);
 
-    console.log(`✅ Location updated successfully for driver ${req.driver.id}`);
-
     res.json({
       success: true,
       message: 'Location updated successfully'
@@ -94,8 +84,6 @@ router.post('/location', authMiddleware, [
 // Get current driver location - GET /location
 router.get('/location', authMiddleware, async (req, res) => {
   try {
-    console.log('📍 GET /location called by driver:', req.driver.id);
-    
     const [location] = await db.query(`
       SELECT * FROM driver_locations 
       WHERE driver_id = ?
@@ -125,8 +113,6 @@ router.get('/location', authMiddleware, async (req, res) => {
 // Get location history - GET /location/history
 router.get('/location/history', authMiddleware, async (req, res) => {
   try {
-    console.log('📍 GET /location/history called by driver:', req.driver.id);
-    
     const { hours = 24, limit = 100 } = req.query;
     
     const [locations] = await db.query(`
@@ -144,7 +130,7 @@ router.get('/location/history', authMiddleware, async (req, res) => {
              ) as status_code
       FROM location_history lh
       WHERE lh.driver_id = ? 
-        AND lh.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+        AND lh.timestamp >= (NOW() - (?::text || ' hours')::interval)
       ORDER BY lh.timestamp DESC
       LIMIT ?
     `, [req.driver.id, req.driver.id, hours, parseInt(limit)]);
@@ -161,8 +147,3 @@ router.get('/location/history', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-
-console.log('📍 Location routes exported - Available endpoints:');
-console.log('  - POST /location (update driver location)');
-console.log('  - GET /location (get current driver location)');
-console.log('  - GET /location/history (get driver location history)');

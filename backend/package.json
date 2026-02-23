@@ -3,13 +3,21 @@
   "version": "1.0.0",
   "description": "Backend API for TruckLog Pro ELD System",
   "main": "server.js",
+  "engines": { "node": ">=18.0.0" },
   "scripts": {
-    "start": "node railway-server.js",
+    "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "echo 'Build completed'",
-    "render": "node railway-server.js",
-    "setup-db": "node migrations/setup-postgres.js",
-    "deploy": "node deploy-postgres.js"
+    "setup": "node scripts/setup.js",
+    "migrate": "knex migrate:latest",
+    "migrate:dev": "NODE_ENV=development knex migrate:latest",
+    "migrate:prod": "NODE_ENV=production knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
+    "seed": "knex seed:run",
+    "test": "jest --runInBand --forceExit",
+    "test:ci": "NODE_ENV=test npm run test",
+    "test-db": "node scripts/test-db.js",
+    "setup-db": "node migrations/setup-postgres.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,12 +27,22 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
+    "knex": "^3.1.0",
     "morgan": "^1.10.0",
     "mysql2": "^3.6.0",
     "pg": "^8.11.3",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/*.test.js"],
+    "testPathIgnorePatterns": ["/node_modules/"],
+    "verbose": true
   }
 }

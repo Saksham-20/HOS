@@ -118,4 +118,9 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Vector icons: use explicit path so fonts are found from project root
+project.ext.vectoricons = [
+    iconFontsDir: "${rootProject.projectDir.getParent()}/node_modules/react-native-vector-icons/Fonts"
+]
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"

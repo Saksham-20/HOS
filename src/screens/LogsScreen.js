@@ -209,7 +209,7 @@ const LogsScreen = () => {
       >
         {state.logEntries.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Icon name="event-note" size={64} color={theme.textTertiary} />
+            <Icon name="event-note" size={48} color={theme.textTertiary} />
             <Text style={styles.emptyText}>No log entries for today</Text>
             <Text style={styles.emptySubtext}>
               Change your status to create a log entry
@@ -324,13 +324,13 @@ const LogsScreen = () => {
                     
                     <View style={styles.logDetails}>
                       <View style={styles.detailRow}>
-                        <Icon name="location-on" size={16} color={theme.textTertiary} />
+                        <Icon name="location-on" size={20} color={theme.textTertiary} />
                         <Text style={styles.location}>{entry.location || 'No location'}</Text>
                       </View>
                       
                       {entry.odometer_start && (
                         <View style={styles.detailRow}>
-                          <Icon name="speed" size={16} color={theme.textTertiary} />
+                          <Icon name="speed" size={20} color={theme.textTertiary} />
                           <Text style={styles.odometer}>
                             {entry.odometer_start} mi
                             {entry.odometer_end && ` - ${entry.odometer_end} mi`}
@@ -340,7 +340,7 @@ const LogsScreen = () => {
                       
                       {entry.notes && (
                         <View style={styles.detailRow}>
-                          <Icon name="note" size={16} color={theme.textTertiary} />
+                          <Icon name="note" size={20} color={theme.textTertiary} />
                           <Text style={styles.notes}>{entry.notes}</Text>
                         </View>
                       )}
@@ -351,7 +351,7 @@ const LogsScreen = () => {
                       
                       {entry.isSubmitted || entry.is_submitted ? (
                         <View style={styles.submittedBadge}>
-                          <Icon name="check-circle" size={16} color={theme.success} />
+                          <Icon name="check-circle" size={20} color={theme.success} />
                           <Text style={styles.submittedText}>Submitted</Text>
                         </View>
                       ) : (
@@ -359,7 +359,7 @@ const LogsScreen = () => {
                           style={styles.editButton}
                           onPress={() => handleEdit(index, entry)}
                         >
-                          <Icon name="edit" size={16} color={theme.primary} />
+                          <Icon name="edit" size={20} color={theme.primary} />
                           <Text style={styles.editButtonText}>Edit</Text>
                         </TouchableOpacity>
                       )}

@@ -1,18 +1,16 @@
-// backend/server.js - Updated with location routes
+// backend/server.js - Main entry: middleware, routes, error handling
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
-// SECURITY: Check for required environment variables
-if (!process.env.JWT_SECRET) {
-  console.error('❌ CRITICAL: JWT_SECRET environment variable is not set!');
-  console.error('   Please set JWT_SECRET in your .env file');
-  console.error('   Example: JWT_SECRET=your-super-secret-key-here');
-  process.exit(1);
-}
+const { validateEnv } = require('./config/env');
+const { errorHandler } = require('./middleware/errorHandler');
 
+validateEnv();
+
+const db = require('./config/database');
 const authRoutes = require('./routes/auth');
 const driverRoutes = require('./routes/drivers');
 const logRoutes = require('./routes/logs');
@@ -25,10 +23,10 @@ const app = express();
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://192.168.1.22:3000', 'exp://192.168.1.22:19000'],
-  credentials: true
-}));
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
+  : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://10.0.2.2:3000', 'http://localhost:19006', 'exp://127.0.0.1:19000'];
+app.use(cors({ origin: corsOrigins.length ? corsOrigins : true, credentials: true }));
 app.use(morgan('dev'));
 
 // Body parsing with size limits for security
@@ -81,15 +79,28 @@ app.use('/api/inspections', inspectionRoutes);
 app.use('/api/violations', violationRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'TruckLog Pro API is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
-});
+// Health check: status + DB connectivity (GET /health and GET /api/health)
+async function healthHandler(req, res, next) {
+  try {
+    const payload = {
+      success: true,
+      message: 'TruckLog Pro API is running',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      database: 'unknown'
+    };
+    if (db.manager && typeof db.manager.healthCheck === 'function') {
+      const dbHealth = await db.manager.healthCheck();
+      payload.database = dbHealth.healthy ? 'connected' : 'disconnected';
+    }
+    const status = payload.database === 'connected' ? 200 : 503;
+    res.status(status).json(payload);
+  } catch (err) {
+    next(err);
+  }
+}
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // API documentation endpoint
 app.get('/api/docs', (req, res) => {
@@ -140,55 +151,7 @@ app.get('/api/docs', (req, res) => {
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error stack:', err.stack);
-  
-  // Database connection errors
-  if (err.code === 'ECONNREFUSED') {
-    return res.status(503).json({
-      success: false,
-      message: 'Database connection failed',
-      error: process.env.NODE_ENV === 'development' ? err.message : 'Service temporarily unavailable'
-    });
-  }
-
-  // JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid token'
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      message: 'Token expired'
-    });
-  }
-
-  // Validation errors
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: Object.values(err.errors).map(e => e.message)
-    });
-  }
-
-  // Default error response
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { 
-      stack: err.stack,
-      details: err 
-    })
-  });
-});
-
-// SAFE 404 handler
+// 404 must be before error handler (so unmatched routes get 404, not 500)
 app.use((req, res, next) => {
   res.status(404).json({
     success: false,
@@ -205,6 +168,9 @@ app.use((req, res, next) => {
     ]
   });
 });
+
+// Centralized error handler (must be last)
+app.use(errorHandler);
 
 // Graceful shutdown handling
 process.on('SIGTERM', () => {
@@ -228,11 +194,29 @@ process.on('unhandledRejection', (reason, promise) => {
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
-  console.log(`🚛 TruckLog Pro Server is running on ${HOST}:${PORT}`);
-  console.log(`📊 Admin Dashboard available at http://${HOST}:${PORT}/api/admin/*`);
-  console.log(`📍 Location Tracking: Real-time GPS tracking enabled`);
-  console.log(`📖 API Documentation at http://${HOST}:${PORT}/api/docs`);
-  console.log(`❤️  Health Check at http://${HOST}:${PORT}/api/health`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+async function start() {
+  if (db.manager && typeof db.manager.waitForConnection === 'function') {
+    try {
+      await db.manager.waitForConnection(5, 2000);
+    } catch (err) {
+      console.error('❌ Database unreachable at startup:', err.message);
+      process.exit(1);
+    }
+  }
+  app.listen(PORT, HOST, () => {
+    console.log(`🚛 TruckLog Pro Server is running on ${HOST}:${PORT}`);
+    console.log(`❤️  Health: http://${HOST}:${PORT}/health`);
+    console.log(`📖 API Docs: http://${HOST}:${PORT}/api/docs`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+// Export app for supertest; start server only when run directly
+if (require.main === module) {
+  start().catch((err) => {
+    console.error('❌ Server failed to start:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = app;

@@ -3,17 +3,16 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
 const { authMiddleware } = require('../middleware/auth');
+const { asyncHandler } = require('../middleware/asyncHandler');
+const { validateQuery } = require('../middleware/validate');
+const { logsQuery } = require('../validators/logSchemas');
 
 const router = express.Router();
 
-// Get driver's logs
-router.get('/', authMiddleware, async (req, res) => {
-  try {
-    const { date, limit = 50, offset = 0 } = req.query;
-    
-    console.log(`📋 Getting logs for driver ${req.driver.id}, date: ${date}, limit: ${limit}`);
-    
-    let query = `
+// Get driver's logs (with pagination)
+router.get('/', authMiddleware, validateQuery(logsQuery), asyncHandler(async (req, res) => {
+  const { date, limit, offset } = req.query;
+  let query = `
       SELECT 
         le.*,
         st.code as status_code,
@@ -25,29 +24,17 @@ router.get('/', authMiddleware, async (req, res) => {
       WHERE le.driver_id = ?
     `;
     
-    const params = [req.driver.id];
-    
+  const params = [req.driver.id];
     if (date) {
-      query += ' AND DATE(le.start_time) = ?';
-      params.push(date);
-    }
-    
-    query += ' ORDER BY le.start_time DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
-    
-    console.log('📋 Executing query:', query);
-    console.log('📋 With params:', params);
-    
-    const [logs] = await db.query(query, params);
-    
-    console.log(`📋 Found ${logs.length} log entries`);
-    
-    res.json({ success: true, logs });
-  } catch (error) {
-    console.error('❌ Error fetching logs:', error);
-    res.status(500).json({ success: false, message: error.message });
+    query += ' AND (le.start_time)::date = ?::date';
+    params.push(date);
   }
-});
+  query += ' ORDER BY le.start_time DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const [logs] = await db.query(query, params);
+  res.json({ success: true, logs });
+}));
 
 // Change status
 router.post('/status', authMiddleware, [
@@ -199,15 +186,15 @@ router.get('/summary/:date', authMiddleware, async (req, res) => {
         SUM(
           CASE 
             WHEN le.end_time IS NOT NULL 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, le.end_time)
-            WHEN DATE(le.start_time) = ? 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, NOW())
+            THEN EXTRACT(EPOCH FROM (le.end_time - le.start_time)) / 60.0
+            WHEN (le.start_time)::date = ?::date 
+            THEN EXTRACT(EPOCH FROM (NOW() - le.start_time)) / 60.0
             ELSE 0
           END
         ) / 60.0 as hours
        FROM log_entries le
        JOIN status_types st ON le.status_id = st.id
-       WHERE le.driver_id = ? AND DATE(le.start_time) = ?
+       WHERE le.driver_id = ? AND (le.start_time)::date = ?::date
        GROUP BY st.code`,
       [date, req.driver.id, date]
     );
@@ -244,7 +231,7 @@ router.get('/summary/:date', authMiddleware, async (req, res) => {
     // Get violations for the day
     const [violations] = await db.query(
       `SELECT * FROM violations 
-       WHERE driver_id = ? AND DATE(violation_date) = ?`,
+       WHERE driver_id = ? AND (violation_date)::date = ?::date`,
       [req.driver.id, date]
     );
 

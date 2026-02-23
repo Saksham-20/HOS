@@ -1,6 +1,28 @@
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
-# Getting Started
+# HOS – Hours of Service Trucking App
+
+ELD-style app for drivers and admins: log duty status, inspections, violations, and live location.  
+**Frontend**: React Native. **Backend**: Node.js + Express (see [backend/README.md](backend/README.md) for API, setup, and deployment).
+
+## Quick start
+
+1. **Backend** (API): `cd backend && cp .env.example .env && npm install && npm run dev`
+2. **Frontend** (React Native): from repo root, `npm start` then `npm run ios` or `npm run android`
+
+## Project layout
+
+```
+HOS/
+├── backend/          # Node + Express API (see backend/README.md)
+├── src/              # React Native app (screens, components, services)
+├── App.js
+└── package.json
+```
+
+---
+
+# Getting Started (React Native)
 
 > **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
 

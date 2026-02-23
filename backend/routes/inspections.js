@@ -81,7 +81,7 @@ router.post('/', authMiddleware, [
         odometer_reading, location, brakes_ok, tires_ok, lights_ok,
         mirrors_ok, horn_ok, windshield_ok, emergency_equipment_ok,
         fluid_levels_ok, defects_found, is_passed, notes
-      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       [
         req.driver.id, truckId, inspectionType, odometerReading, location,
         brakes, tires, lights, mirrors, horn, windshield,
@@ -141,7 +141,7 @@ router.get('/roadside-data', authMiddleware, async (req, res) => {
       `SELECT le.*, st.code as status_code, st.name as status_name
        FROM log_entries le
        JOIN status_types st ON le.status_id = st.id
-       WHERE le.driver_id = ? AND DATE(le.start_time) = CURDATE()
+       WHERE le.driver_id = ? AND (le.start_time)::date = CURRENT_DATE
        ORDER BY le.start_time ASC`,
       [req.driver.id]
     );
@@ -149,7 +149,7 @@ router.get('/roadside-data', authMiddleware, async (req, res) => {
     // Get daily summary
     const [summary] = await db.query(
       `SELECT * FROM daily_hours_view 
-       WHERE driver_id = ? AND log_date = CURDATE()`,
+       WHERE driver_id = ? AND log_date = CURRENT_DATE`,
       [req.driver.id]
     );
 

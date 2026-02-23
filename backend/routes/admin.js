@@ -189,23 +189,23 @@ router.get('/drivers/active', adminJwtAuth, async (req, res) => {
         
         -- Last activity (log entry or location update)
         GREATEST(
-          IFNULL((SELECT MAX(le.start_time) FROM log_entries le WHERE le.driver_id = d.id), '1970-01-01'),
-          IFNULL(dl.timestamp, '1970-01-01')
+          COALESCE((SELECT MAX(le.start_time) FROM log_entries le WHERE le.driver_id = d.id), '1970-01-01'::timestamp),
+          COALESCE(dl.timestamp, '1970-01-01'::timestamp)
         ) as last_update,
         
         -- Today's hours calculation
         (SELECT COALESCE(SUM(
           CASE 
             WHEN le.end_time IS NOT NULL 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, le.end_time)
-            WHEN DATE(le.start_time) = CURDATE() 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, NOW())
+            THEN EXTRACT(EPOCH FROM (le.end_time - le.start_time)) / 60.0
+            WHEN (le.start_time)::date = CURRENT_DATE 
+            THEN EXTRACT(EPOCH FROM (NOW() - le.start_time)) / 60.0
             ELSE 0
           END
         ), 0) / 60.0
          FROM log_entries le 
          JOIN status_types st ON le.status_id = st.id 
-         WHERE le.driver_id = d.id AND st.code IN ('DRIVING', 'ON_DUTY') AND DATE(le.start_time) = CURDATE()) as duty_hours,
+         WHERE le.driver_id = d.id AND st.code IN ('DRIVING', 'ON_DUTY') AND (le.start_time)::date = CURRENT_DATE) as duty_hours,
         
         -- Violation count
         (SELECT COUNT(*) 
@@ -214,7 +214,7 @@ router.get('/drivers/active', adminJwtAuth, async (req, res) => {
          
         -- Check if driver is online (location updated within last 5 minutes)
         CASE 
-          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN TRUE 
+          WHEN dl.timestamp > (NOW() - INTERVAL '5 minutes') THEN TRUE 
           ELSE FALSE 
         END as is_online
         
@@ -253,7 +253,7 @@ router.get('/fleet/stats', adminJwtAuth, async (req, res) => {
          FROM drivers d
          JOIN driver_locations dl ON d.id = dl.driver_id
          WHERE d.is_active = TRUE 
-         AND dl.timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR)) as active_drivers,
+         AND dl.timestamp >= (NOW() - INTERVAL '1 hour')) as active_drivers,
         
         (SELECT COUNT(DISTINCT d.id)
          FROM drivers d
@@ -338,7 +338,7 @@ router.get('/drivers/live-locations', adminJwtAuth, async (req, res) => {
          
         -- Check if online (updated within last 1 hour)
         CASE 
-          WHEN dl.timestamp > DATE_SUB(NOW(), INTERVAL 1 HOUR) THEN TRUE 
+          WHEN dl.timestamp > (NOW() - INTERVAL '1 hour') THEN TRUE 
           ELSE FALSE 
         END as is_online
         
@@ -415,8 +415,8 @@ router.get('/drivers/:driverId', adminJwtAuth, async (req, res) => {
         
         -- Last update
         GREATEST(
-          IFNULL((SELECT MAX(le.start_time) FROM log_entries le WHERE le.driver_id = d.id), '1970-01-01'),
-          IFNULL(dl.timestamp, '1970-01-01')
+          COALESCE((SELECT MAX(le.start_time) FROM log_entries le WHERE le.driver_id = d.id), '1970-01-01'::timestamp),
+          COALESCE(dl.timestamp, '1970-01-01'::timestamp)
         ) as last_update
         
       FROM drivers d
@@ -441,32 +441,32 @@ router.get('/drivers/:driverId', adminJwtAuth, async (req, res) => {
         COALESCE(SUM(
           CASE 
             WHEN le.end_time IS NOT NULL 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, le.end_time)
-            WHEN DATE(le.start_time) = CURDATE() 
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, NOW())
+            THEN EXTRACT(EPOCH FROM (le.end_time - le.start_time)) / 60.0
+            WHEN (le.start_time)::date = CURRENT_DATE 
+            THEN EXTRACT(EPOCH FROM (NOW() - le.start_time)) / 60.0
             ELSE 0
           END
         ), 0) / 60.0 as hours
       FROM log_entries le
       JOIN status_types st ON le.status_id = st.id
-      WHERE le.driver_id = ? AND DATE(le.start_time) = CURDATE()
+      WHERE le.driver_id = ? AND (le.start_time)::date = CURRENT_DATE
       GROUP BY st.code
     `, [driverId]);
 
-    // Get weekly hours
+    // Get weekly hours (start of week = Monday)
     const [weeklyData] = await db.query(`
       SELECT 
         COALESCE(SUM(
           CASE 
             WHEN st.code IN ('DRIVING', 'ON_DUTY')
-            THEN TIMESTAMPDIFF(MINUTE, le.start_time, IFNULL(le.end_time, NOW())) / 60.0
+            THEN EXTRACT(EPOCH FROM (COALESCE(le.end_time, NOW()) - le.start_time)) / 3600.0
             ELSE 0
           END
         ), 0) as total_hours
       FROM log_entries le
       JOIN status_types st ON le.status_id = st.id
       WHERE le.driver_id = ? 
-      AND le.start_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+      AND le.start_time >= DATE_TRUNC('week', CURRENT_DATE)::date
     `, [driverId]);
 
     // Get active violations
@@ -546,7 +546,7 @@ router.get('/drivers/:driverId/location-history', adminJwtAuth, async (req, res)
         COALESCE(lh.status, 'UNKNOWN') as status_code
       FROM location_history lh
       WHERE lh.driver_id = ? 
-      AND lh.timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+      AND lh.timestamp >= (NOW() - (?::text || ' hours')::interval)
       ORDER BY lh.timestamp DESC
       LIMIT 200
     `, [driverId, hours]);

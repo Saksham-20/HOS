@@ -97,20 +97,14 @@ const LoginScreen = ({ navigation }) => {
     if (isRegistering) {
       const result = await register(formData);
       if (result.success) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Main' }]
-        });
+        // No navigation.reset: App.js switches to Main stack when isLoggedIn becomes true
       } else {
         Alert.alert('Registration Failed', result.message);
       }
     } else {
       const result = await login(formData.username, formData.password);
       if (result.success) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Main' }]
-        });
+        // No navigation.reset: App.js switches to Main stack when isLoggedIn becomes true
       } else {
         Alert.alert('Login Failed', result.message);
       }

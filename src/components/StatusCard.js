@@ -76,7 +76,7 @@ const StatusCard = () => {
       <View style={[styles.header, { borderBottomColor: theme.borderLight }]}>
         <Text style={[styles.title, { color: theme.text }]}>Current Status</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(state.currentStatus) }]}>
-          <Icon name={getStatusIcon(state.currentStatus)} size={16} color="#ffffff" />
+          <Icon name={getStatusIcon(state.currentStatus)} size={20} color="#ffffff" />
           <Text style={styles.statusText}>{state.currentStatus.replace('_', ' ')}</Text>
         </View>
       </View>

@@ -334,7 +334,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000, drivers: externalDri
       {/* Status info header */}
       <View style={[styles.statusHeader, { backgroundColor: theme.card }]}>
         <View style={styles.statusInfo}>
-          <Icon name="update" size={16} color={theme.textSecondary} />
+          <Icon name="update" size={20} color={theme.textSecondary} />
           <Text style={[styles.statusText, { color: theme.text }]}>
             Live: {drivers.length} drivers
           </Text>
@@ -346,7 +346,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000, drivers: externalDri
           style={[styles.refreshButton, { backgroundColor: theme.primary }]}
           onPress={loadDriverLocations}
         >
-          <Icon name="refresh" size={16} color="#ffffff" />
+          <Icon name="refresh" size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
 

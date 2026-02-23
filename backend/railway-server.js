@@ -1,4 +1,9 @@
-// Production server with all APIs from development server
+/**
+ * Production server entry for Render/Railway (PostgreSQL).
+ * WARNING: This file contains fallback credentials and mock data for demo.
+ * For production: remove fallback users, use database-only auth, and protect
+ * all admin/driver routes with JWT (see server.js + middleware/auth.js).
+ */
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -760,21 +765,18 @@ app.post('/api/logs/status', authenticateToken, async (req, res) => {
       }
     } catch (dbError) {
       console.log('Database status update not available, using fallback');
+      return res.json({
+        success: true,
+        message: 'Status updated successfully',
+        log: {
+          id: null,
+          status,
+          location: location || 'Unknown Location',
+          notes: notes || '',
+          timestamp: new Date().toISOString()
+        }
+      });
     }
-    
-    // Fallback: Just return success without database storage
-    
-    res.json({
-      success: true,
-      message: 'Status updated successfully',
-      log: {
-        id: logResult.rows[0].id,
-        status,
-        location,
-        notes,
-        timestamp: new Date().toISOString()
-      }
-    });
   } catch (error) {
     console.error('Status update error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

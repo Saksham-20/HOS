@@ -40,6 +40,15 @@ local.properties
 node_modules/
 npm-debug.log
 yarn-error.log
+.npm
+
+# Environment and secrets (NEVER commit these)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+*.pem
 
 # fastlane
 #
