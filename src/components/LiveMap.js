@@ -255,7 +255,7 @@ const LiveMap = ({ onDriverSelect, refreshInterval = 30000, drivers: externalDri
     <View style={styles.container}>
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+        {...(Platform.OS === 'android' ? { provider: PROVIDER_GOOGLE } : {})}
         style={styles.map}
         initialRegion={mapRegion}
         onMapReady={() => {}}

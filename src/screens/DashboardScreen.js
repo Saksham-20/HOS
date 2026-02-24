@@ -4,8 +4,11 @@ import {
   StyleSheet, 
   ScrollView, 
   RefreshControl,
-  ActivityIndicator 
+  ActivityIndicator,
+  TouchableOpacity,
+  Text
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import StatusCard from '../components/StatusCard';
 import HoursCard from '../components/HoursCard';
 import ViolationAlert from '../components/ViolationAlert';
@@ -69,6 +72,13 @@ const DashboardScreen = () => {
         {state.violations.length > 0 && <ViolationAlert violations={state.violations} />}
         <StatusButtons />
         <VehicleInfo />
+        <TouchableOpacity
+          style={[styles.routeButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+          onPress={() => navigation.navigate('RoutePlayback')}
+        >
+          <Icon name="route" size={24} color={theme.primary} />
+          <Text style={[styles.routeButtonText, { color: theme.text }]}>View today's route</Text>
+        </TouchableOpacity>
       </ScrollView>
     </ThemedSafeAreaView>
   );
@@ -86,6 +96,22 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16
+  },
+  routeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1
+  },
+  routeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10
   }
 });
 

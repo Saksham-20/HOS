@@ -2,6 +2,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { rateLimitAuth } = require('../middleware/rateLimitAuth');
 
 const router = express.Router();
 
@@ -125,8 +126,8 @@ const adminJwtAuth = (req, res, next) => {
   }
 };
 
-// Admin login
-router.post('/login', adminLoginAuth, (req, res) => {
+// Admin login (with rate limiting)
+router.post('/login', rateLimitAuth, adminLoginAuth, (req, res) => {
   const token = jwt.sign(
     { role: 'admin', username: req.admin.username, adminId: req.admin.id },
     process.env.JWT_SECRET,
@@ -558,10 +559,35 @@ router.get('/drivers/:driverId/location-history', adminJwtAuth, async (req, res)
 
   } catch (error) {
     console.error('Error fetching location history:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch location history' 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch location history'
     });
+  }
+});
+
+// Get driver route/trip coordinates by date (sorted by timestamp) - for map playback
+router.get('/drivers/:driverId/route', adminJwtAuth, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const [rows] = await db.query(
+      `SELECT latitude, longitude, timestamp
+       FROM location_history
+       WHERE driver_id = ? AND (timestamp)::date = ?::date
+       ORDER BY timestamp ASC
+       LIMIT 5000`,
+      [driverId, date]
+    );
+    const coordinates = (rows || []).map((r) => ({
+      latitude: parseFloat(r.latitude),
+      longitude: parseFloat(r.longitude),
+      timestamp: r.timestamp,
+    }));
+    res.json({ success: true, coordinates, date });
+  } catch (error) {
+    console.error('Error fetching route:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

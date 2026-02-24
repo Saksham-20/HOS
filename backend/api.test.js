@@ -141,4 +141,38 @@ describe('Backend API', () => {
       if (res.status === 200) expect(res.body).toHaveProperty('success', true);
     });
   });
+
+  describe('GPS / location ingestion', () => {
+    let token;
+    beforeAll(async () => {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ username: TEST_USER, password: TEST_PASS });
+      if (res.status === 200 && res.body.token) token = res.body.token;
+    });
+    test('POST /api/drivers/location without token returns 401', async () => {
+      const res = await request(app)
+        .post('/api/drivers/location')
+        .send({ latitude: 40.7, longitude: -74.0 });
+      expect(res.status).toBe(401);
+    });
+    test('POST /api/drivers/location with invalid body returns 400', async () => {
+      if (!token) return;
+      const res = await request(app)
+        .post('/api/drivers/location')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ latitude: 'invalid', longitude: -74 });
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('success', false);
+    });
+    test('POST /api/drivers/location with valid token and coordinates returns 200', async () => {
+      if (!token) return;
+      const res = await request(app)
+        .post('/api/drivers/location')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ latitude: 40.7128, longitude: -74.006, address: 'Test Address' });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('success', true);
+    });
+  });
 });

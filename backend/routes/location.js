@@ -1,23 +1,15 @@
 // backend/routes/location.js - FIXED VERSION
 const express = require('express');
-const { body, validationResult } = require('express-validator');
 const db = require('../config/database');
-const { authMiddleware } = require('../middleware/auth'); // FIXED: Destructured import
+const { authMiddleware } = require('../middleware/auth');
+const { validateRequest } = require('../middleware/validateRequest');
+const { locationBody, locationHistoryQuery, routeQuery } = require('../schemas/location.schema');
 
 const router = express.Router();
 
-// Update driver location - POST /location
-router.post('/location', authMiddleware, [
-  body('latitude').isFloat({ min: -90, max: 90 }),
-  body('longitude').isFloat({ min: -180, max: 180 }),
-  body('timestamp').optional().isISO8601()
-], async (req, res) => {
+// Update driver location - POST /location (Zod-validated GPS ingestion)
+router.post('/location', authMiddleware, validateRequest(locationBody, 'body'), async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array() });
-    }
-
     const {
       latitude,
       longitude,
@@ -111,7 +103,7 @@ router.get('/location', authMiddleware, async (req, res) => {
 });
 
 // Get location history - GET /location/history
-router.get('/location/history', authMiddleware, async (req, res) => {
+router.get('/location/history', authMiddleware, validateRequest(locationHistoryQuery, 'query'), async (req, res) => {
   try {
     const { hours = 24, limit = 100 } = req.query;
     
@@ -142,6 +134,30 @@ router.get('/location/history', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error fetching location history:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get trip/route coordinates by date (sorted by timestamp) - for route playback
+router.get('/route', authMiddleware, validateRequest(routeQuery, 'query'), async (req, res) => {
+  try {
+    const { date } = req.query;
+    const [rows] = await db.query(
+      `SELECT latitude, longitude, timestamp
+       FROM location_history
+       WHERE driver_id = ? AND (timestamp)::date = ?::date
+       ORDER BY timestamp ASC
+       LIMIT 5000`,
+      [req.driver.id, date]
+    );
+    const coordinates = (rows || []).map((r) => ({
+      latitude: parseFloat(r.latitude),
+      longitude: parseFloat(r.longitude),
+      timestamp: r.timestamp,
+    }));
+    res.json({ success: true, coordinates, date });
+  } catch (error) {
+    console.error('❌ Error fetching route:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

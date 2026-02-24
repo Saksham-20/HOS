@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const { validateEnv } = require('./config/env');
 const { errorHandler } = require('./middleware/errorHandler');
+const { rateLimitAuth } = require('./middleware/rateLimitAuth');
 
 validateEnv();
 
@@ -27,7 +28,7 @@ const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
   : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://10.0.2.2:3000', 'http://localhost:19006', 'exp://127.0.0.1:19000'];
 app.use(cors({ origin: corsOrigins.length ? corsOrigins : true, credentials: true }));
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Body parsing with size limits for security
 app.use(express.json({ limit: '10mb' }));
@@ -70,8 +71,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
-app.use('/api/auth', authRoutes);
+// Routes (auth with stricter rate limiting)
+app.use('/api/auth', rateLimitAuth, authRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/drivers', locationRoutes); // Mount location routes under /api/drivers
 app.use('/api/logs', logRoutes);
@@ -118,7 +119,8 @@ app.get('/api/docs', (req, res) => {
         'GET /api/drivers/cycle-info': 'Get 8-day cycle info',
         'POST /api/drivers/location': 'Update driver location',
         'GET /api/drivers/location': 'Get current driver location',
-        'GET /api/drivers/location/history': 'Get driver location history'
+        'GET /api/drivers/location/history': 'Get driver location history',
+        'GET /api/drivers/route?date=YYYY-MM-DD': 'Get trip coordinates by date (route playback)'
       },
       logs: {
         'GET /api/logs': 'Get driver logs',

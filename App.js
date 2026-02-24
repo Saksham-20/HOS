@@ -14,6 +14,7 @@ import InspectionScreen from './src/screens/InspectionScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RoadsideInspectionScreen from './src/screens/RoadsideInspectionScreen';
+import RoutePlaybackScreen from './src/screens/RoutePlaybackScreen';
 import AdminDashboardScreen from './src/screens/AdminDashboardScreen';
 import { AppProvider, useApp } from './src/context/AppContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -136,6 +137,11 @@ const AppNavigator = () => {
                 headerTitle: 'Roadside Inspection',
                 headerTitleStyle: { fontWeight: 'bold' }
               }}
+            />
+            <Stack.Screen 
+              name="RoutePlayback" 
+              component={RoutePlaybackScreen}
+              options={{ headerShown: false }}
             />
           </>
         ) : (

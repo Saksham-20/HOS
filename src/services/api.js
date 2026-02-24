@@ -110,6 +110,10 @@ class ApiService {
     return this.request(`/drivers/location/history?hours=${hours}`);
   }
 
+  async getRouteByDate(date) {
+    return this.request(`/drivers/route?date=${date}`);
+  }
+
   // Log endpoints with location support
   async getLogs(params = {}) {
     const queryString = new URLSearchParams(params).toString();
