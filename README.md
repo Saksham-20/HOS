@@ -1,119 +1,171 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# 🚛 TruckerPro — HOS Compliance & GPS Tracking System
 
-# HOS – Hours of Service Trucking App
+A full-stack trucking compliance and real-time GPS tracking system built with React Native and Node.js.
 
-ELD-style app for drivers and admins: log duty status, inspections, violations, and live location.  
-**Frontend**: React Native. **Backend**: Node.js + Express (see [backend/README.md](backend/README.md) for API, setup, and deployment).
+This project simulates an electronic logging device (ELD) style workflow where drivers can record duty status, while administrators monitor compliance and trip activity.
 
-## Quick start
+---
 
-1. **Backend** (API): `cd backend && cp .env.example .env && npm install && npm run dev`
-2. **Frontend** (React Native): from repo root, `npm start` then `npm run ios` or `npm run android`
+## ✨ Key Features
 
-## Project layout
+### 👨‍✈️ Driver App (React Native)
+
+* Secure driver authentication
+* Daily log (HOS) management
+* Background GPS tracking
+* Real-time location updates
+* Trip route playback on map
+* Offline-safe location handling
+
+---
+
+### 🧑‍💼 Admin / Backend
+
+* REST API built with Node.js & Express
+* Trip and log management
+* GPS coordinate ingestion pipeline
+* Request validation with Zod
+* Centralized error handling
+* Rate limiting & security middleware
+* PostgreSQL database integration
+
+---
+
+## 🗺️ Route Playback
+
+The system stores GPS coordinates and reconstructs trip routes using map polylines, enabling:
+
+* trip history visualization
+* driver activity review
+* compliance monitoring
+
+---
+
+## 🏗️ Tech Stack
+
+**Mobile**
+
+* React Native
+* Expo Location
+* React Navigation
+* Context API
+
+**Backend**
+
+* Node.js
+* Express.js
+* PostgreSQL
+* Zod (API validation)
+* Jest + Supertest (testing)
+* Docker
+
+---
+
+## 🧪 Test Coverage
+
+Basic automated tests included:
+
+* Auth API test
+* GPS ingestion test
+* Logs API test
+* React Native render test
+
+---
+
+## 📦 Project Structure
 
 ```
 HOS/
-├── backend/          # Node + Express API (see backend/README.md)
-├── src/              # React Native app (screens, components, services)
-├── App.js
-└── package.json
+├── src/                # React Native app
+├── backend/            # Express API
+├── __tests__/          # Test suite
+├── ios/                # iOS project
+├── android/            # Android project
+└── Dockerfile
 ```
 
 ---
 
-# Getting Started (React Native)
+## ⚙️ Local Setup
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+### 1️⃣ Clone repo
 
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+```bash
+git clone <your-repo-url>
+cd HOS
 ```
 
-## Step 2: Build and run your app
+---
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+### 2️⃣ Backend setup
 
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+cd backend
+npm install
+cp .env.example .env
+npm run dev
 ```
 
-### iOS
+---
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+### 3️⃣ Mobile app
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```bash
+cd ..
+npm install
+npx expo start
 ```
 
-Then, and every time you update your native dependencies, run:
+---
 
-```sh
-bundle exec pod install
+## 🔐 Environment Variables
+
+Create `.env` in backend:
+
+```
+PORT=5000
+DATABASE_URL=your_postgres_url
+JWT_SECRET=your_secret
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+---
 
-```sh
-# Using npm
-npm run ios
+## 🚀 Deployment
 
-# OR using Yarn
-yarn ios
-```
+Backend is configured for:
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+* Docker
+* Render / Railway style deployment
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+See:
 
-## Step 3: Modify your app
+* `backend/render.yaml`
+* `RENDER_DEPLOYMENT.md`
 
-Now that you have successfully run the app, let's make changes!
+---
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+## 🧭 Future Improvements
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+Planned enhancements:
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+* HOS violation detection
+* WebSocket live tracking
+* Offline sync queue
+* Advanced analytics dashboard
+* AI-powered compliance insights
 
-## Congratulations! :tada:
+---
 
-You've successfully run and modified your React Native App. :partying_face:
+## 👨‍💻 Author
 
-### Now what?
+**Nishant Puri**
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+* Final-year Computer Science student
+* Software Engineer Intern
+* Open to remote opportunities worldwide
 
-# Troubleshooting
+---
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+## ⚠️ Note
 
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+This project was developed with the assistance of AI development tools (Claude, Cursor) while focusing on understanding full-stack architecture, GPS telemetry flows, and production backend practices.
